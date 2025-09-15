@@ -11,6 +11,7 @@ import ActivityDashboard from './components/ActivityDashboard';
 import ReportLibrary from './components/ReportLibrary';
 import RFPAnalyzer from './components/RFPAnalyzer';
 import MarketPulse from './components/MarketPulse';
+import ProductGapReport from './components/ProductGapReport';
 import { HeliosLogo } from './components/icons/HeliosLogo';
 
 const App: React.FC = () => {
@@ -47,6 +48,8 @@ const App: React.FC = () => {
         return <InternalSearch />;
       case ModuleType.RFP_ANALYZER:
         return <RFPAnalyzer />;
+      case ModuleType.PRODUCT_GAP_ANALYSIS:
+        return <ProductGapReport />;
       case ModuleType.ACTIVITY_DASHBOARD:
         return <ActivityDashboard />;
       case ModuleType.REPORT_LIBRARY:

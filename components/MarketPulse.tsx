@@ -1,7 +1,11 @@
 
+
 import React, { useState, useEffect, useCallback } from 'react';
-import { fetchMarketTrends, generateMarketPulseSummary } from '../services/geminiService';
-import { MarketTrend, MarketPulseSummary } from '../types';
+import { fetchMarketTrends, generateMarketPulseSummary, generatePersonalizedInsights } from '../services/geminiService';
+import { MarketTrend, MarketPulseSummary, UserPersona } from '../types';
+import MarketPulseChart from './MarketPulseChart';
+import { marked } from 'marked';
+import { UserIcon } from './icons/UserIcon';
 
 const verticals = [
     "Payer (Insurance)", 
@@ -11,12 +15,25 @@ const verticals = [
     "Medical Devices"
 ];
 
+const userPersonas: UserPersona[] = [
+    'Sales Development Rep',
+    'Account Executive',
+    'Sales Leadership',
+    'Market Analyst'
+];
+
 const MarketPulse: React.FC = () => {
   const [activeVertical, setActiveVertical] = useState<string>(verticals[0]);
   const [trends, setTrends] = useState<MarketTrend[]>([]);
   const [summary, setSummary] = useState<MarketPulseSummary | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+
+  // State for personalized insights
+  const [selectedPersona, setSelectedPersona] = useState<UserPersona>(userPersonas[0]);
+  const [insights, setInsights] = useState<string | null>(null);
+  const [isInsightsLoading, setIsInsightsLoading] = useState<boolean>(false);
+  const [insightsError, setInsightsError] = useState<string | null>(null);
 
   const loadMarketData = useCallback(async (vertical: string) => {
     setIsLoading(true);
@@ -43,6 +60,27 @@ const MarketPulse: React.FC = () => {
     loadMarketData(activeVertical);
   }, [activeVertical, loadMarketData]);
 
+  // useEffect for insights
+  useEffect(() => {
+    if (summary) {
+      const getInsights = async () => {
+        setIsInsightsLoading(true);
+        setInsightsError(null);
+        setInsights(null);
+        try {
+          const result = await generatePersonalizedInsights(summary, selectedPersona);
+          setInsights(result);
+        } catch (err) {
+          setInsightsError('Failed to generate personalized insights.');
+          console.error(err);
+        } finally {
+          setIsInsightsLoading(false);
+        }
+      };
+      getInsights();
+    }
+  }, [summary, selectedPersona]);
+
   const handleVerticalChange = (vertical: string) => {
     setActiveVertical(vertical);
   };
@@ -55,21 +93,40 @@ const MarketPulse: React.FC = () => {
     { title: 'Looking Ahead', points: summary.lookingAhead },
   ] : [];
 
+  const parsedInsights = insights ? marked(insights, { gfm: true, breaks: true }) : '';
+
   return (
     <div>
       <div className="bg-white p-6 rounded-lg shadow-md mb-8">
         <h2 className="text-2xl font-bold text-slate-800 mb-1">Market Pulse</h2>
         <p className="text-slate-500 mb-4">Discover the latest trends, news, and regulatory updates across key healthcare verticals.</p>
-        <div className="flex flex-wrap gap-2">
-          {verticals.map(v => (
-            <button 
-              key={v}
-              onClick={() => handleVerticalChange(v)}
-              className={`px-4 py-2 rounded-md font-semibold text-sm transition-colors ${activeVertical === v ? 'bg-sky-500 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
-            >
-              {v}
-            </button>
-          ))}
+        <div className="border-t border-b border-slate-200 py-4 my-4">
+          <h3 className="text-sm font-semibold text-slate-600 mb-2">Select Vertical</h3>
+          <div className="flex flex-wrap gap-2">
+            {verticals.map(v => (
+              <button 
+                key={v}
+                onClick={() => handleVerticalChange(v)}
+                className={`px-4 py-2 rounded-md font-semibold text-sm transition-colors ${activeVertical === v ? 'bg-sky-500 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
+        </div>
+         <div>
+             <h3 className="text-sm font-semibold text-slate-600 mb-2">Personalize Insights For</h3>
+             <div className="flex flex-wrap gap-2">
+                {userPersonas.map(p => (
+                    <button 
+                        key={p}
+                        onClick={() => setSelectedPersona(p)}
+                        className={`px-3 py-1.5 rounded-md font-semibold text-xs transition-colors ${selectedPersona === p ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+                        >
+                        {p}
+                    </button>
+                ))}
+            </div>
         </div>
       </div>
 
@@ -84,6 +141,30 @@ const MarketPulse: React.FC = () => {
 
       {!isLoading && !error && (
         <>
+        {(isInsightsLoading || insights || insightsError) && (
+            <div className="bg-white p-6 rounded-lg shadow-md mb-8 animate-fade-in">
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="flex-shrink-0 bg-indigo-100 rounded-full p-2">
+                        <UserIcon className="h-5 w-5 text-indigo-600" />
+                    </div>
+                    <h3 className="text-lg font-bold text-slate-700">What You Need to Know: <span className="font-normal text-indigo-600">{selectedPersona}</span></h3>
+                </div>
+                {isInsightsLoading && (
+                    <div className="flex items-center justify-center min-h-[100px]">
+                        <p className="text-slate-500">Generating personalized insights...</p>
+                    </div>
+                )}
+                {insightsError && <p className="text-red-500">{insightsError}</p>}
+                {insights && (
+                    <div
+                        className="prose prose-slate max-w-none prose-sm prose-li:my-1"
+                        dangerouslySetInnerHTML={{ __html: parsedInsights as string }}
+                    />
+                )}
+            </div>
+        )}
+
+        {summary && <MarketPulseChart summary={summary} />}
         {summary && (
             <div className="mb-12 animate-fade-in">
                 <h3 className="text-2xl font-bold text-slate-800 mb-6">Market Snapshot</h3>

@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import type { ReportData, Citation, GroundingChunk, LeadGenerationResult, EmailData, RFPAnalysisResult, MarketTrend, MarketPulseSummary, RFPRequirement } from '../types';
+import type { ReportData, Citation, GroundingChunk, LeadGenerationResult, EmailData, RFPAnalysisResult, MarketTrend, MarketPulseSummary, RFPRequirement, UserPersona, TalkingPointsResult } from '../types';
 
 if (!process.env.API_KEY) {
     console.error("API_KEY environment variable not set.");
@@ -419,5 +419,131 @@ export const generateMarketPulseSummary = async (vertical: string): Promise<Mark
     } catch (error) {
         console.error(`Error generating market pulse summary for ${vertical}:`, error);
         throw new Error('Failed to generate market pulse summary from Gemini API.');
+    }
+};
+
+export const generatePersonalizedInsights = async (summary: MarketPulseSummary, persona: UserPersona): Promise<string> => {
+    const summaryJson = JSON.stringify(summary, null, 2);
+
+    let personaInstruction = '';
+    switch (persona) {
+        case 'Sales Development Rep':
+            personaInstruction = 'Focus on immediate outreach opportunities. Provide 3-4 bullet points including potential conversation starters, timely pain points to mention in cold calls or emails, and specific sub-sectors or company types showing momentum that are ripe for prospecting.';
+            break;
+        case 'Account Executive':
+            personaInstruction = 'Focus on strategic conversation points for discovery calls and demos. Provide 3-4 bullet points covering key market shifts to align solutions with, potential long-term client needs based on "Looking Ahead" trends, and competitive angles to be aware of.';
+            break;
+        case 'Sales Leadership':
+            personaInstruction = 'Focus on high-level strategy and team direction. Provide 3-4 bullet points summarizing major market headwinds or tailwinds, potential new market segments or territories to explore, and competitive threats that the team needs to be prepared for.';
+            break;
+        case 'Market Analyst':
+            personaInstruction = 'Focus on areas for deeper investigation. Provide 3-4 bullet points highlighting surprising or contradictory trends, emerging technologies or regulations that require a full report, and key data points that should be tracked moving forward.';
+            break;
+    }
+
+    const prompt = `
+        You are an expert sales and market intelligence strategist.
+        The user's role is: **${persona}**.
+        
+        Based on the following market pulse summary data for a specific healthcare vertical, generate a concise "What You Need to Know" briefing tailored specifically for this role.
+        
+        **Persona-specific Instructions:** ${personaInstruction}
+
+        The output should be clear, actionable, and formatted as markdown. Do not include a title or any introductory text like "Here's what you need to know:". Just provide the bullet points.
+
+        **Market Pulse Summary Data:**
+        \`\`\`json
+        ${summaryJson}
+        \`\`\`
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+        });
+        const insights = response.text;
+        if (!insights) {
+            throw new Error('Received an empty response from the AI for personalized insights.');
+        }
+        return insights;
+    } catch (error) {
+        console.error(`Error generating personalized insights for ${persona}:`, error);
+        throw new Error('Failed to generate personalized insights from Gemini API.');
+    }
+};
+
+export const generateTalkingPointsForChallenge = async (
+    challengeOrInitiative: string,
+    prospectName: string,
+    prospectContext: string
+): Promise<TalkingPointsResult> => {
+    const prompt = `
+        You are an expert product marketing and sales strategist for Helios, a B2B healthcare data and analytics company.
+        Your hypothetical product suite includes:
+        - **Helios Data Platform:** A foundational product for data integration and management.
+        - **Helios Analytics Suite:** A tool for advanced analytics, predictive modeling, and data visualization.
+        - **Helios Compliance Engine:** A solution for regulatory reporting and compliance monitoring (e.g., HEDIS, Stars).
+
+        A sales representative is analyzing the prospect "${prospectName}".
+        The overall intelligence report on them is as follows:
+        ---
+        ${prospectContext}
+        ---
+
+        The specific challenge or initiative to address is: "${challengeOrInitiative}"
+
+        Your task is to analyze this specific point and generate a strategic response.
+        1.  **Analyze Fit:** Determine if Helios's current product suite can address this point.
+        2.  **Generate Talking Points:** Create 2-3 concise, actionable talking points for a sales representative to use in a conversation. These points should directly connect a Helios product to the prospect's stated need.
+        3.  **Identify Gaps:** If no current Helios product is a good fit, explicitly state that this is a "product gap".
+        4.  **Suggest New Solutions:** If you identify a gap, brainstorm a high-level concept for a new product or feature that *could* solve this problem.
+
+        Return your response as a single, valid JSON object with the following schema. Do not include any text, explanations, or markdown formatting before or after the JSON object.
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: {
+                responseMimeType: 'application/json',
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        isGap: {
+                            type: Type.BOOLEAN,
+                            description: "True if no current product is a good fit, otherwise false."
+                        },
+                        talkingPoints: {
+                            type: Type.STRING,
+                            description: "2-3 markdown bullet points for sales to use. This should always be provided, even if it's a gap (e.g., positioning our expertise)."
+                        },
+                        gapAnalysis: {
+                            type: Type.STRING,
+                            description: "A one-sentence analysis explaining why it is or is not a gap. e.g., 'Our Helios Analytics Suite directly addresses this by...' or 'Our current suite lacks the real-time capabilities to solve this.'"
+                        },
+                        newSolutionIdea: {
+                            type: Type.STRING,
+                            description: "An optional high-level description of a new product or feature idea if isGap is true."
+                        }
+                    },
+                    required: ["isGap", "talkingPoints", "gapAnalysis"]
+                }
+            }
+        });
+
+        const text = response.text;
+        if (!text) {
+             throw new Error('Received an empty response from the AI for talking points.');
+        }
+
+        const jsonStr = cleanJsonString(text);
+        const parsed: TalkingPointsResult = JSON.parse(jsonStr);
+        return parsed;
+
+    } catch (error) {
+        console.error("Error in generateTalkingPointsForChallenge:", error);
+        throw new Error('Failed to generate talking points from Gemini API.');
     }
 };

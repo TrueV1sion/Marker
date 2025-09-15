@@ -12,6 +12,7 @@ import { ActivityIcon } from './icons/ActivityIcon';
 import { LibraryIcon } from './icons/LibraryIcon';
 import { RFPAnalyzerIcon } from './icons/RFPAnalyzerIcon';
 import { MarketPulseIcon } from './icons/MarketPulseIcon';
+import { FlaskIcon } from './icons/FlaskIcon';
 
 interface SidebarProps {
   activeModule: ModuleType;
@@ -26,6 +27,7 @@ const navItems = [
   { type: ModuleType.MARKET_PULSE, icon: MarketPulseIcon },
   { type: ModuleType.INTERNAL_KNOWLEDGE, icon: KnowledgeIcon },
   { type: ModuleType.RFP_ANALYZER, icon: RFPAnalyzerIcon },
+  { type: ModuleType.PRODUCT_GAP_ANALYSIS, icon: FlaskIcon },
   { type: ModuleType.ACTIVITY_DASHBOARD, icon: ActivityIcon },
   { type: ModuleType.REPORT_LIBRARY, icon: LibraryIcon },
 ];

@@ -11,6 +11,11 @@ import Loader from './Loader';
 import MeetingPrepModal from './MeetingPrepModal';
 import { EmailIcon } from './icons/EmailIcon';
 import OutreachModal from './OutreachModal';
+import OrgChart from './OrgChart';
+import KeyStatsBanner from './KeyStatsBanner';
+import ChallengesAndInitiatives from './ChallengesAndInitiatives';
+import TechnologyFootprint from './TechnologyFootprint';
+import NewsTimeline from './NewsTimeline';
 
 interface ReportViewProps {
   report: ReportData;
@@ -144,11 +149,31 @@ const ReportView: React.FC<ReportViewProps> = ({ report }) => {
                 </button>
                 </div>
             </div>
+            
+            {/* --- Visual Summary Section --- */}
+            {report.keyStats && <KeyStatsBanner stats={report.keyStats} />}
+            {report.orgChartData && report.orgChartData.length > 0 && (
+              <OrgChart data={report.orgChartData} />
+            )}
+            {report.challengesAndInitiatives && report.challengesAndInitiatives.length > 0 && (
+              <ChallengesAndInitiatives report={report} />
+            )}
+            {report.technologyFootprint && report.technologyFootprint.length > 0 && (
+              <TechnologyFootprint tech={report.technologyFootprint} />
+            )}
+            {report.recentNews && report.recentNews.length > 0 && (
+              <NewsTimeline newsItems={report.recentNews} />
+            )}
 
-            <div
-                className="prose prose-slate max-w-none prose-headings:font-bold prose-h3:text-xl prose-h4:text-lg prose-a:text-sky-600 hover:prose-a:text-sky-700 prose-strong:text-slate-800 prose-li:my-1"
-                dangerouslySetInnerHTML={{ __html: parsedContent as string }}
-            />
+            {/* --- Detailed Report Section --- */}
+            <div className="mt-12 pt-8 border-t border-slate-200">
+                <h3 className="text-2xl font-bold text-slate-700 mb-4">Full Detailed Report</h3>
+                <div
+                    className="prose prose-slate max-w-none prose-headings:font-bold prose-h3:text-xl prose-h4:text-lg prose-a:text-sky-600 hover:prose-a:text-sky-700 prose-strong:text-slate-800 prose-li:my-1"
+                    dangerouslySetInnerHTML={{ __html: parsedContent as string }}
+                />
+            </div>
+
 
             {report.citations.length > 0 && (
                 <div className="mt-12 pt-6 border-t border-slate-200">

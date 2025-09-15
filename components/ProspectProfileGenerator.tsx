@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback } from 'react';
 import { generateContentWithCitations } from '../services/geminiService';
 import { addActivity } from '../services/activityTracker';
@@ -28,18 +27,89 @@ const ProspectProfileGenerator: React.FC<ProspectProfileGeneratorProps> = ({ ini
     setError(null);
     setReport(null);
 
-    const prompt = `Generate a detailed prospect profile for the healthcare organization "${prospectName}". The report must be well-structured and include the following sections:
+    const prompt = `Generate a detailed prospect profile for the healthcare organization "${prospectName}".
+      The response must have two parts: a well-structured markdown report and a single JSON data block.
+
+      PART 1: COMPREHENSIVE MARKDOWN REPORT
+      The report should be detailed and well-written, including the following sections using markdown formatting:
       - **Executive Summary:** A brief overview of the organization's size, focus, and current market position.
-      - **Key Personnel:** A list of C-suite executives and relevant department heads.
-      - **Stated Challenges & Initiatives:** Direct quotes or summaries of problems they are trying to solve or projects they are undertaking (e.g., "improving value-based care outcomes," "reducing administrative overhead").
-      - **Technology Footprint:** Mentions of current technology vendors, EHR systems, or data platforms they use.
-      - **Recent News & Financials:** A bulleted list of the most important recent events and a summary of their financial health.
-      
-      Ensure all information is based on public sources and presented in a professional, easy-to-read format. Use markdown for formatting.`;
+      - **Financial Summary:** A paragraph summarizing their financial health, including any recent earnings reports or financial announcements.
+      - **Key Challenges & Pain Points:** A detailed analysis of the primary challenges the organization is facing.
+      - **Strategic Initiatives & Goals:** A description of their publicly stated goals and strategic initiatives.
+      - **Technology & Infrastructure:** An overview of their known technology stack, including EHR systems and data platforms.
+      - **Recent News & Developments:** A summary of important recent news and announcements in paragraph form.
+
+      PART 2: JSON DATA BLOCK
+      After the markdown report, provide a JSON data block containing structured information.
+      The JSON block MUST start with the exact marker \`[START_JSON_DATA]\` on a new line and end with the exact marker \`[END_JSON_DATA]\` on a new line. Do not include markdown backticks or the word "json" around the data block.
+
+      The JSON object should have the following keys:
+      1.  "keyStats": An object with optional "companySize", "annualRevenue", and "primaryFocus" (string values).
+      2.  "orgChartData": An array of objects for key personnel. Each object must have "name", "title", "bio" (a one-sentence description), and an optional "linkedin" (full URL).
+      3.  "challengesAndInitiatives": An array of objects. Each object must have "type" ('challenge' or 'initiative') and "description" (string).
+      4.  "technologyFootprint": An array of strings listing current technology vendors, EHR systems, or data platforms.
+      5.  "recentNews": An array of objects summarizing recent events. Each object must have "date" (e.g., "YYYY-MM-DD" or "Month YYYY") and "headline" (string).
+
+      Example of the JSON data block structure:
+      [START_JSON_DATA]
+      {
+        "keyStats": {
+          "companySize": "10,000+ employees",
+          "annualRevenue": "$5 Billion",
+          "primaryFocus": "Managed Care"
+        },
+        "orgChartData": [
+          { "name": "Jane Doe", "title": "CEO", "bio": "...", "linkedin": "..." }
+        ],
+        "challengesAndInitiatives": [
+          { "type": "challenge", "description": "Navigating complex regulatory changes." },
+          { "type": "initiative", "description": "Launching a new digital patient engagement platform." }
+        ],
+        "technologyFootprint": ["Epic Systems", "Salesforce Health Cloud", "AWS"],
+        "recentNews": [
+          { "date": "2023-10-26", "headline": "Announced partnership with XYZ Corp to enhance data analytics." }
+        ]
+      }
+      [END_JSON_DATA]
+      `;
 
     try {
       const generatedReport = await generateContentWithCitations(prompt, `Prospect Profile: ${prospectName}`);
-      const finalReport = { ...generatedReport, moduleType: ModuleType.PROSPECT_PROFILE };
+      
+      let finalContent = generatedReport.content;
+      let reportDataExtensions = {};
+
+      const startMarker = '[START_JSON_DATA]';
+      const endMarker = '[END_JSON_DATA]';
+      const startIndex = finalContent.indexOf(startMarker);
+      const endIndex = finalContent.indexOf(endMarker);
+
+      if (startIndex !== -1 && endIndex !== -1) {
+        const jsonString = finalContent.substring(startIndex + startMarker.length, endIndex).trim();
+        try {
+          const parsedData = JSON.parse(jsonString);
+          reportDataExtensions = {
+            orgChartData: parsedData.orgChartData,
+            keyStats: parsedData.keyStats,
+            challengesAndInitiatives: parsedData.challengesAndInitiatives,
+            technologyFootprint: parsedData.technologyFootprint,
+            recentNews: parsedData.recentNews,
+          };
+          // Remove the JSON block from the main content
+          finalContent = finalContent.substring(0, startIndex).trim();
+        } catch (e) {
+          console.error("Failed to parse structured JSON data:", e);
+          // If parsing fails, leave the content as is so user can see the raw data
+        }
+      }
+      
+      const finalReport: ReportData = { 
+        ...generatedReport, 
+        content: finalContent,
+        ...reportDataExtensions,
+        moduleType: ModuleType.PROSPECT_PROFILE 
+      };
+
       setReport(finalReport);
       saveReport(finalReport);
       addActivity({
@@ -47,7 +117,8 @@ const ProspectProfileGenerator: React.FC<ProspectProfileGeneratorProps> = ({ ini
           module: ModuleType.PROSPECT_PROFILE,
           details: { primary: prospectName },
       });
-    } catch (err) {
+    } catch (err)
+ {
       setError('An error occurred while generating the report. Please try again.');
       console.error(err);
     } finally {

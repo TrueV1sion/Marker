@@ -10,6 +10,7 @@ export enum ModuleType {
   RFP_ANALYZER = 'RFP & Security Analyzer',
   ACTIVITY_DASHBOARD = 'Activity Dashboard',
   REPORT_LIBRARY = 'Report Library',
+  PRODUCT_GAP_ANALYSIS = 'Product Gap Analysis',
 }
 
 export enum ActivityType {
@@ -34,11 +35,39 @@ export interface Citation {
   title: string;
 }
 
+export interface TeamMember {
+  name: string;
+  title: string;
+  bio: string;
+  linkedin?: string;
+}
+
+export interface KeyStats {
+  companySize?: string;
+  annualRevenue?: string;
+  primaryFocus?: string;
+}
+
+export interface ChallengeOrInitiative {
+  type: 'challenge' | 'initiative';
+  description: string;
+}
+
+export interface NewsItem {
+  date: string;
+  headline: string;
+}
+
 export interface ReportData {
   title: string;
   content: string;
   citations: Citation[];
   moduleType?: ModuleType;
+  orgChartData?: TeamMember[];
+  keyStats?: KeyStats;
+  challengesAndInitiatives?: ChallengeOrInitiative[];
+  technologyFootprint?: string[];
+  recentNews?: NewsItem[];
 }
 
 export interface SavedReportData extends ReportData {
@@ -90,4 +119,22 @@ export interface MarketPulseSummary {
   lastMonth: string[];
   lastWeek: string[];
   lookingAhead: string[];
+}
+
+export type UserPersona = 'Sales Development Rep' | 'Account Executive' | 'Sales Leadership' | 'Market Analyst';
+
+export interface TalkingPointsResult {
+    isGap: boolean;
+    talkingPoints: string;
+    gapAnalysis: string;
+    newSolutionIdea?: string;
+}
+
+export interface ProductGap {
+  id: string;
+  savedAt: string;
+  prospectName: string;
+  challengeDescription: string;
+  gapAnalysis: string;
+  newSolutionIdea: string;
 }
