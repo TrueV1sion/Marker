@@ -1,7 +1,8 @@
 
-import React, { useState, useCallback } from 'react';
-import { ModuleType, ReportData } from './types';
+import React, { useState, useCallback, useEffect } from 'react';
+import { ModuleType, ReportData, Notification } from './types';
 import { NavGroup, navGroups } from './navigation';
+import { getNotifications, markAllAsRead } from './services/notificationStore';
 import Sidebar from './components/Sidebar';
 import MobileNav from './components/MobileNav';
 import Launchpad from './components/Launchpad';
@@ -20,6 +21,8 @@ import DiscoveryQuestions from './components/DiscoveryQuestions';
 import Home from './components/Home';
 import ReportTemplates from './components/ReportTemplates';
 import ProspectBook from './components/ProspectBook';
+import NotificationsPanel from './components/NotificationsPanel';
+
 
 const App: React.FC = () => {
   const [activeModule, setActiveModule] = useState<ModuleType>(ModuleType.HOME);
@@ -27,6 +30,31 @@ const App: React.FC = () => {
   const [initialProspectForBook, setInitialProspectForBook] = useState<string>('');
   const [initialReportForPlaybook, setInitialReportForPlaybook] = useState<ReportData | null>(null);
   const [activeLaunchpadGroup, setActiveLaunchpadGroup] = useState<NavGroup | null>(null);
+  
+  // --- Notifications State ---
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [isNotificationsPanelOpen, setIsNotificationsPanelOpen] = useState(false);
+  
+  const syncNotifications = useCallback(() => {
+    setNotifications(getNotifications());
+  }, []);
+
+  useEffect(() => {
+    syncNotifications();
+    window.addEventListener('notifications-updated', syncNotifications);
+    return () => window.removeEventListener('notifications-updated', syncNotifications);
+  }, [syncNotifications]);
+
+  const handleToggleNotifications = () => {
+    setIsNotificationsPanelOpen(prev => !prev);
+  };
+  
+  const handleMarkAllRead = () => {
+    markAllAsRead();
+    syncNotifications();
+  };
+
+  const unreadNotificationsCount = notifications.filter(n => !n.isRead).length;
 
 
   const handleGenerateProfileForLead = useCallback((prospectName: string) => {
@@ -44,6 +72,12 @@ const App: React.FC = () => {
     setActiveModule(ModuleType.DEAL_PLAYBOOK);
     // Reset after a short delay to allow DealPlaybook to consume the prop
     setTimeout(() => setInitialReportForPlaybook(null), 500);
+  }, []);
+  
+  const handleNotificationClick = useCallback((notification: Notification) => {
+    setIsNotificationsPanelOpen(false);
+    setInitialProspectForBook(notification.linkTo.prospectName);
+    setActiveModule(notification.linkTo.module);
   }, []);
 
   const handleWatchlistAction = useCallback((action: { type: string, payload: any }) => {
@@ -105,12 +139,22 @@ const App: React.FC = () => {
   return (
     <div className="flex h-screen bg-slate-100 font-sans">
       {/* --- Desktop Sidebar --- */}
-      <div className="hidden md:flex">
+      <div className="hidden md:flex relative">
         <Sidebar 
           activeModule={activeModule} 
           setActiveModule={handleSetActiveModule}
+          unreadNotificationsCount={unreadNotificationsCount}
+          onToggleNotifications={handleToggleNotifications}
+        />
+        <NotificationsPanel
+          isOpen={isNotificationsPanelOpen}
+          notifications={notifications}
+          onClose={() => setIsNotificationsPanelOpen(false)}
+          onMarkAllRead={handleMarkAllRead}
+          onNotificationClick={handleNotificationClick}
         />
       </div>
+
 
       <main className="flex-1 flex flex-col overflow-hidden">
         <div className="flex-1 p-4 md:p-6 lg:p-8 overflow-y-auto pb-24 md:pb-8">

@@ -109,6 +109,19 @@ export interface Comment {
   content: string;
   createdAt: string;
 }
+
+export interface Notification {
+  id: string;
+  type: 'SHARE' | 'MENTION';
+  actor: User; // Who performed the action
+  message: string; // e.g., "shared 'Centene' with you."
+  linkTo: {
+    module: ModuleType;
+    prospectName: string; // To identify the specific asset
+  };
+  isRead: boolean;
+  createdAt: string;
+}
 // --- END NEW Collaboration Models ---
 
 

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { ProspectBookData, User } from '../types';
+import { ProspectBookData, User, ModuleType } from '../types';
+import { addNotification } from '../services/notificationStore';
 import { ChevronDownIcon } from './icons/ChevronDownIcon';
 import { XIcon } from './icons/XIcon';
 import { UsersIcon } from './icons/UsersIcon';
@@ -26,11 +27,27 @@ export const ShareModal: React.FC<ShareModalProps> = ({ book, isOpen, onClose, o
         t.name.toLowerCase().includes(searchQuery.toLowerCase()) && 
         !sharedWith.some(s => s.user.id === t.id)
     );
+    
+    const triggerNotifications = (oldList: SharedUser[], newList: SharedUser[]) => {
+        const oldUserIds = new Set(oldList.map(s => s.user.id));
+        const newlyAdded = newList.filter(s => !oldUserIds.has(s.user.id));
+
+        newlyAdded.forEach(share => {
+            addNotification({
+                type: 'SHARE',
+                actor: currentUser,
+                message: `shared "${book.prospectName}" with you.`,
+                linkTo: { module: ModuleType.PROSPECT_BOOK, prospectName: book.prospectName }
+            });
+        });
+    };
 
     const handleAddUser = (user: User) => {
+        const oldSharedList = [...sharedWith];
         const newSharedList = [...sharedWith, { user, role: selectedRole }];
         setSharedWith(newSharedList);
         onUpdateSharing(newSharedList);
+        triggerNotifications(oldSharedList, newSharedList);
         setSearchQuery('');
     };
 

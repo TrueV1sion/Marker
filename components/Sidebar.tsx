@@ -4,13 +4,16 @@ import { ModuleType } from '../types';
 import { NavItem, navGroups } from '../navigation';
 import { HeliosLogo } from './icons/HeliosLogo';
 import { ChevronDownIcon } from './icons/ChevronDownIcon';
+import { BellIcon } from './icons/BellIcon';
 
 interface SidebarProps {
   activeModule: ModuleType;
   setActiveModule: (module: ModuleType) => void;
+  unreadNotificationsCount: number;
+  onToggleNotifications: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ activeModule, setActiveModule }) => {
+const Sidebar: React.FC<SidebarProps> = ({ activeModule, setActiveModule, unreadNotificationsCount, onToggleNotifications }) => {
     const [openSections, setOpenSections] = useState<Set<string>>(() => {
         const activeGroup = navGroups.find(g => g.items.some(i => i.type === activeModule));
         return activeGroup ? new Set([activeGroup.title]) : new Set(['Prospecting', 'Workspace']);
@@ -85,7 +88,16 @@ const Sidebar: React.FC<SidebarProps> = ({ activeModule, setActiveModule }) => {
             })}
         </ul>
         <div className="p-4 border-t border-slate-700 flex-shrink-0">
-            <p className="text-xs text-slate-400">
+             <button onClick={onToggleNotifications} className="relative w-full flex items-center p-3 rounded-md text-slate-300 hover:bg-slate-700 hover:text-white transition-colors">
+                <BellIcon className="h-6 w-6" />
+                <span className="ml-4">Notifications</span>
+                {unreadNotificationsCount > 0 && (
+                    <span className="absolute top-2 right-2 flex items-center justify-center h-5 w-5 bg-red-500 text-white text-xs rounded-full">
+                        {unreadNotificationsCount}
+                    </span>
+                )}
+            </button>
+            <p className="text-xs text-slate-400 mt-4">
             &copy; {new Date().getFullYear()} Helios Inc.
             </p>
         </div>

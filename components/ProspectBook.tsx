@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { getProspectBooks, createOrUpdateProspectBook, updateProspectBook } from '../services/prospectBookStore';
-import { ProspectBookData, ReportData, SavedReportData, User } from '../types';
+import { getProspectBooks, updateProspectBook } from '../services/prospectBookStore';
+import { ProspectBookData, ReportData, SavedReportData, User, Comment } from '../types';
 import { SearchIcon } from './icons/SearchIcon';
-import ReportView from './ReportView'; // Re-used for a consistent, non-editable view display
+import ReportView from './ReportView';
 import { SaveIcon } from './icons/SaveIcon';
 import { PencilIcon } from './icons/PencilIcon';
 import { ShareIcon } from './icons/ShareIcon';
 import { PlusIcon } from './icons/PlusIcon';
 import { ShareModal } from './ShareModal';
+import { ChatBubbleLeftRightIcon } from './icons/ChatBubbleLeftRightIcon';
+import CommentsSidebar from './CommentsSidebar';
 
 interface ProspectBookProps {
   initialProspectName?: string;
@@ -18,7 +20,7 @@ interface ProspectBookProps {
 const MOCK_CURRENT_USER: User = { id: 'user-1', name: 'You', avatarUrl: 'https://picsum.photos/seed/user-1/40/40' };
 const MOCK_TEAMMATE: User = { id: 'user-2', name: 'David Evans', avatarUrl: 'https://picsum.photos/seed/user-2/40/40' };
 const MOCK_SALES_MANAGER: User = { id: 'user-3', name: 'Alicia Chen', avatarUrl: 'https://picsum.photos/seed/user-3/40/40' };
-const AVAILABLE_TEAMMATES = [MOCK_TEAMMATE, MOCK_SALES_MANAGER];
+const AVAILABLE_TEAMMATES = [MOCK_TEAMMATE, MOCK_SALES_MANAGER, { ...MOCK_CURRENT_USER, name: 'Alex Miller' }]; // Add current user with real name for mentions
 
 
 const ProspectBook: React.FC<ProspectBookProps> = ({ initialProspectName, onStartPlaybook }) => {
@@ -28,6 +30,7 @@ const ProspectBook: React.FC<ProspectBookProps> = ({ initialProspectName, onStar
     const [isEditMode, setIsEditMode] = useState(false);
     const [editedBook, setEditedBook] = useState<ProspectBookData | null>(null);
     const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+    const [isCommentsSidebarOpen, setIsCommentsSidebarOpen] = useState(false);
 
     // Effect to load and subscribe to book data
     useEffect(() => {
@@ -87,8 +90,7 @@ const ProspectBook: React.FC<ProspectBookProps> = ({ initialProspectName, onStar
     const handleSaveEdit = () => {
         if (!editedBook) return;
         
-        const { prospectName, createdAt, updatedAt, ...dataToSave } = editedBook;
-        createOrUpdateProspectBook(prospectName, dataToSave);
+        updateProspectBook(editedBook.prospectName, editedBook);
 
         setIsEditMode(false);
         setEditedBook(null);
@@ -105,11 +107,23 @@ const ProspectBook: React.FC<ProspectBookProps> = ({ initialProspectName, onStar
         updateProspectBook(activeBook.prospectName, { sharedWith: newSharedWith });
         // The useEffect listening to 'prospect-books-updated' will handle the UI refresh.
     };
+    
+    const handleAddComment = (commentText: string) => {
+        if (!activeBook || !commentText.trim()) return;
+
+        const newComment: Comment = {
+            id: `${Date.now()}`,
+            author: MOCK_CURRENT_USER,
+            content: commentText,
+            createdAt: new Date().toISOString(),
+        };
+
+        const updatedComments = [...(activeBook.comments || []), newComment];
+        updateProspectBook(activeBook.prospectName, { comments: updatedComments });
+    };
 
     const bookUsers = useMemo(() => {
         if (!activeBook) return [];
-        // In a real app, this would come from `activeBook.owner` and `activeBook.sharedWith`
-        // For this mock, the current user is always the owner.
         const sharedUsers = activeBook.sharedWith?.map(s => s.user) || [];
         return [MOCK_CURRENT_USER, ...sharedUsers];
     }, [activeBook]);
@@ -128,9 +142,7 @@ const ProspectBook: React.FC<ProspectBookProps> = ({ initialProspectName, onStar
             )
         }
         
-        // Use ReportView for read-only mode for consistency
         if (!isEditMode) {
-             // We need to shape ProspectBookData to look like SavedReportData for ReportView
             const reportViewData: SavedReportData = {
                 ...bookToDisplay,
                 id: bookToDisplay.prospectName,
@@ -139,7 +151,6 @@ const ProspectBook: React.FC<ProspectBookProps> = ({ initialProspectName, onStar
             return <ReportView report={reportViewData} onStartPlaybook={onStartPlaybook} />
         }
         
-        // Render editable form
         return (
             <div className="bg-white p-8 rounded-lg shadow-lg animate-fade-in">
                 <h2 className="text-3xl font-bold text-slate-800 mb-6">{bookToDisplay.title}</h2>
@@ -188,6 +199,16 @@ const ProspectBook: React.FC<ProspectBookProps> = ({ initialProspectName, onStar
                     onUpdateSharing={handleShareUpdate}
                     availableTeammates={AVAILABLE_TEAMMATES}
                     currentUser={MOCK_CURRENT_USER}
+                />
+            )}
+            {activeBook && (
+                <CommentsSidebar
+                    book={activeBook}
+                    currentUser={MOCK_CURRENT_USER}
+                    availableTeammates={AVAILABLE_TEAMMATES}
+                    isOpen={isCommentsSidebarOpen}
+                    onClose={() => setIsCommentsSidebarOpen(false)}
+                    onAddComment={handleAddComment}
                 />
             )}
             <div className="flex gap-8 h-full">
@@ -253,6 +274,9 @@ const ProspectBook: React.FC<ProspectBookProps> = ({ initialProspectName, onStar
                                 </>
                             ) : (
                                 <>
+                                <button onClick={() => setIsCommentsSidebarOpen(true)} className="flex items-center justify-center bg-slate-100 text-slate-700 px-4 py-2 rounded-md font-semibold hover:bg-slate-200 transition-colors">
+                                    <ChatBubbleLeftRightIcon className="h-5 w-5 mr-2" /> Comments
+                                </button>
                                 <button onClick={() => setIsShareModalOpen(true)} className="flex items-center justify-center bg-slate-100 text-slate-700 px-4 py-2 rounded-md font-semibold hover:bg-slate-200 transition-colors">
                                     <ShareIcon className="h-5 w-5 mr-2" /> Share
                                 </button>
