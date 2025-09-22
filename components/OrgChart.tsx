@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { TeamMember } from '../types';
 import { LinkedInIcon } from './icons/LinkedInIcon';
@@ -13,13 +14,18 @@ const OrgChart: React.FC<OrgChartProps> = ({ data }) => {
     const popoverRef = useRef<HTMLDivElement | null>(null);
     const memberRefs = useRef<{ [key: string]: HTMLButtonElement | null }>({});
 
+    // Fix: The type of `event.target` can be `unknown` or a generic `EventTarget`.
+    // This ensures `target` is a `Node` before calling `.contains`, which resolves the type error, especially within callbacks.
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
-            if (popoverRef.current && !popoverRef.current.contains(event.target as Node)) {
-                // Check if the click was on one of the member buttons
-                const isMemberButtonClick = Object.values(memberRefs.current).some(ref => ref?.contains(event.target as Node));
-                if (!isMemberButtonClick) {
-                    setActiveMember(null);
+            const target = event.target;
+            if (target instanceof Node) {
+                if (popoverRef.current && !popoverRef.current.contains(target)) {
+                    // Check if the click was on one of the member buttons
+                    const isMemberButtonClick = Object.values(memberRefs.current).some(ref => ref?.contains(target));
+                    if (!isMemberButtonClick) {
+                        setActiveMember(null);
+                    }
                 }
             }
         };
@@ -55,7 +61,6 @@ const OrgChart: React.FC<OrgChartProps> = ({ data }) => {
                 {data.map((member) => (
                     <button
                         key={member.name}
-                        // FIX: The ref callback should not return a value. Using a block body `{}` instead of an implicit return `()` fixes the TypeScript error.
                         ref={(el) => { memberRefs.current[member.name] = el; }}
                         onClick={() => handleMemberClick(member, memberRefs.current[member.name])}
                         className={`p-4 bg-white rounded-lg shadow-md hover:shadow-lg hover:-translate-y-1 transition-all text-left focus:outline-none focus:ring-2 focus:ring-sky-500 ${activeMember?.name === member.name ? 'ring-2 ring-sky-500' : 'border border-slate-200'}`}

@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import type { ReportData, Citation, GroundingChunk, LeadGenerationResult, EmailData, RFPAnalysisResult, MarketTrend, MarketPulseSummary, RFPRequirement, UserPersona, TalkingPointsResult, SavedReportData } from '../types';
+import type { ReportData, Citation, GroundingChunk, LeadGenerationResult, EmailData, RFPAnalysisResult, RFPRequirement, UserPersona, TalkingPointsResult, SavedReportData, MarketResearchResult, SearchFocus, WatchlistItem, WatchlistAlert, AlertType } from '../types';
 
 if (!process.env.API_KEY) {
     console.error("API_KEY environment variable not set.");
@@ -25,8 +25,8 @@ const processCitations = (groundingChunks: GroundingChunk[] | undefined): Citati
     const citations: Citation[] = groundingChunks
         .filter(chunk => chunk.web && chunk.web.uri && chunk.web.title)
         .map(chunk => ({
-            uri: chunk.web.uri,
-            title: chunk.web.title,
+            uri: chunk.web.uri!,
+            title: chunk.web.title!,
         }));
 
     // De-duplicate citations
@@ -35,7 +35,7 @@ const processCitations = (groundingChunks: GroundingChunk[] | undefined): Citati
     return uniqueCitations;
 };
 
-const cleanJsonString = (text: string): string => {
+export const cleanJsonString = (text: string): string => {
     // First, remove markdown fences if they exist.
     let jsonStr = text.trim();
     if (jsonStr.startsWith('```json')) {
@@ -152,13 +152,14 @@ ${criteriaParts.join('\n')}
 Use Google Search to find 5 to 10 companies that match this profile. For each company, provide a brief, compelling one-sentence reason why they are a good fit as a prospect${keywords.trim() ? ', tailored to the keywords' : ''}. Do not list more than 10 companies.
 
 Your final response MUST be a single, valid JSON object with a single key "leads". The value of "leads" should be an array of objects, where each object has two keys: "companyName" (string) and "reason" (string).
+Crucially, ensure that any double quotes within the "companyName" or "reason" strings are properly escaped with a backslash (\\").
 Do not include any text, explanations, or markdown formatting before or after the JSON object.
 Example format:
 {
   "leads": [
     {
       "companyName": "Example Health System",
-      "reason": "They recently announced an initiative to improve patient outcomes."
+      "reason": "They recently announced an initiative called \\"Project Health\\" to improve patient outcomes."
     }
   ]
 }`;
@@ -423,134 +424,77 @@ export const analyzeRFP = async (rfpText: string): Promise<RFPAnalysisResult> =>
     }
 };
 
-export const fetchMarketTrends = async (vertical: string): Promise<MarketTrend[]> => {
-  const prompt = `Using Google Search, identify the top 3-5 most important and recent market trends for the "${vertical}" sector in the healthcare industry. For each trend, provide a concise title, a brief summary, and a source URI.
-  
-  Your response MUST be a single, valid JSON object with a single key "trends". The value of "trends" should be an array of objects, where each object has three keys: "title" (string), "summary" (string), and "uri" (string).
-  Do not include any text, explanations, or markdown formatting before or after the JSON object.`;
-
-  try {
-    const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-        config: {
-          tools: [{ googleSearch: {} }],
-        },
-    });
-
-    const text = response.text;
-    if (!text) {
-        console.warn(`Gemini API returned an empty response for market trends on "${vertical}".`);
-        return [];
-    }
-
-    const jsonStr = cleanJsonString(text);
-    const parsed = JSON.parse(jsonStr);
-    
-    const trends = parsed.trends || [];
-    const citations = processCitations(response.candidates?.[0]?.groundingMetadata?.groundingChunks);
-
-    // If a trend is missing a URI, try to fill it from citations.
-    return trends.map((trend: MarketTrend, index: number) => {
-        if (!trend.uri && citations[index]) {
-            return { ...trend, uri: citations[index].uri };
-        }
-        return trend;
-    });
-
-  } catch (error) {
-    console.error(`Error fetching market trends for ${vertical}:`, error);
-    throw new Error('Failed to fetch market trends from Gemini API.');
-  }
-};
-
-export const generateMarketPulseSummary = async (vertical: string): Promise<MarketPulseSummary> => {
-    const prompt = `Provide a high-level, executive summary of the key news and market insights for the "${vertical}" healthcare vertical.
-    Use Google Search to find the most relevant information.
-    Structure your response into five distinct categories:
-    - This Year: 2-3 key developments or trends that have defined the year so far.
-    - Last Quarter: 2-3 significant events, reports, or shifts from the previous quarter.
-    - Last Month: 2-3 notable news items or updates from the last 30 days.
-    - Last Week: 1-2 of the most recent, impactful news items.
-    - Looking Ahead: 2-3 predictions or anticipated trends for the next 6-12 months.
-
-    Return the response as a single, valid JSON object with keys: "thisYear", "lastQuarter", "lastMonth", "lastWeek", and "lookingAhead".
-    Each key should have a value that is an array of strings, where each string is a concise bullet point.
-    Do not include any text, explanations, or markdown formatting before or after the JSON object.`;
-    
-    try {
-        const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
-            contents: prompt,
-            config: {
-                tools: [{googleSearch: {}}]
-            },
-        });
-
-        const text = response.text;
-        if (!text) {
-             throw new Error('Received an empty response from the AI for the market summary.');
-        }
-
-        const jsonStr = cleanJsonString(text);
-        return JSON.parse(jsonStr);
-
-    } catch (error) {
-        console.error(`Error generating market pulse summary for ${vertical}:`, error);
-        throw new Error('Failed to generate market pulse summary from Gemini API.');
-    }
-};
-
-export const generatePersonalizedInsights = async (summary: MarketPulseSummary, persona: UserPersona): Promise<string> => {
-    const summaryJson = JSON.stringify(summary, null, 2);
-
-    let personaInstruction = '';
-    switch (persona) {
-        case 'Sales Development Rep':
-            personaInstruction = 'Focus on immediate outreach opportunities. Provide 3-4 bullet points including potential conversation starters, timely pain points to mention in cold calls or emails, and specific sub-sectors or company types showing momentum that are ripe for prospecting.';
+export const performMarketResearch = async (query: string, focus: SearchFocus): Promise<MarketResearchResult> => {
+    let focusInstruction = '';
+    switch (focus) {
+        case 'CLINICAL':
+            focusInstruction = 'When searching, prioritize authoritative clinical and academic sources such as PubMed, Google Scholar, clinicaltrials.gov, and official medical journals (e.g., The Lancet, NEJM).';
             break;
-        case 'Account Executive':
-            personaInstruction = 'Focus on strategic conversation points for discovery calls and demos. Provide 3-4 bullet points covering key market shifts to align solutions with, potential long-term client needs based on "Looking Ahead" trends, and competitive angles to be aware of.';
+        case 'FINANCIAL':
+            focusInstruction = 'When searching, prioritize official financial and corporate sources such as SEC filings (10-K, 10-Q reports), investor relations pages on corporate websites, and reputable financial news outlets (e.g., Wall Street Journal, Bloomberg).';
             break;
-        case 'Sales Leadership':
-            personaInstruction = 'Focus on high-level strategy and team direction. Provide 3-4 bullet points summarizing major market headwinds or tailwinds, potential new market segments or territories to explore, and competitive threats that the team needs to be prepared for.';
+        case 'NEWS':
+            focusInstruction = 'When searching, prioritize established healthcare industry news publications like Fierce Healthcare, STAT News, Endpoints News, and BioPharma Dive.';
             break;
-        case 'Market Analyst':
-            personaInstruction = 'Focus on areas for deeper investigation. Provide 3-4 bullet points highlighting surprising or contradictory trends, emerging technologies or regulations that require a full report, and key data points that should be tracked moving forward.';
+        case 'ALL_WEB':
+        default:
+            focusInstruction = 'Use Google Search to gather the most relevant and up-to-date information from a wide range of web sources.';
             break;
     }
 
     const prompt = `
-        You are an expert sales and market intelligence strategist.
-        The user's role is: **${persona}**.
-        
-        Based on the following market pulse summary data for a specific healthcare vertical, generate a concise "What You Need to Know" briefing tailored specifically for this role.
-        
-        **Persona-specific Instructions:** ${personaInstruction}
+        Act as an expert market research analyst for the healthcare industry. Your task is to provide a comprehensive and well-structured answer to the user's question.
+        ${focusInstruction}
 
-        The output should be clear, actionable, and formatted as markdown. Do not include a title or any introductory text like "Here's what you need to know:". Just provide the bullet points.
+        The user's question is: "${query}"
 
-        **Market Pulse Summary Data:**
-        \`\`\`json
-        ${summaryJson}
-        \`\`\`
+        Your final response MUST be a single, valid JSON object. Do not include any text, explanations, or markdown formatting before or after the JSON object.
+
+        The JSON object must have the following two keys:
+        1.  "answer": A markdown-formatted string. This should be a detailed, synthesized answer based on your search results. The answer must be clear, insightful, and directly address the user's query. Use markdown for formatting (headings, lists, bold text) to improve readability.
+        2.  "relatedQuestions": An array of 3 to 5 strings. Each string should be a relevant and insightful follow-up question that a user might naturally ask next to continue their research journey. This key is mandatory and the array must not be empty.
+
+        Example format:
+        {
+          "answer": "### Latest Trends in Value-Based Care\\nBased on recent analysis, the key trends are...",
+          "relatedQuestions": [
+            "How does value-based care impact provider revenue streams?",
+            "What technologies are essential for implementing value-based care models?",
+            "Compare the VBC models in the US and Europe."
+          ]
+        }
     `;
 
     try {
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: prompt,
+            config: {
+                tools: [{ googleSearch: {} }],
+            }
         });
-        const insights = response.text;
-        if (!insights) {
-            throw new Error('Received an empty response from the AI for personalized insights.');
+
+        const text = response.text;
+        if (!text) {
+            throw new Error('Received an empty response from the AI for market research.');
         }
-        return insights;
+
+        const jsonStr = cleanJsonString(text);
+        const parsed = JSON.parse(jsonStr);
+        const citations = processCitations(response.candidates?.[0]?.groundingMetadata?.groundingChunks);
+
+        return {
+            answer: parsed.answer || '',
+            relatedQuestions: parsed.relatedQuestions || [],
+            citations,
+        };
+
     } catch (error) {
-        console.error(`Error generating personalized insights for ${persona}:`, error);
-        throw new Error('Failed to generate personalized insights from Gemini API.');
+        console.error(`Error performing market research for query "${query}":`, error);
+        throw new Error('Failed to perform market research with Gemini API.');
     }
 };
+
 
 export const generateTalkingPointsForChallenge = async (
     challengeOrInitiative: string,
@@ -945,5 +889,58 @@ export const answerDiscoveryQuestions = async (
     } catch (error) {
         console.error("Error in answerDiscoveryQuestions:", error);
         throw new Error('Failed to generate answers for discovery questions from Gemini API.');
+    }
+};
+
+export const scanForWatchlistAlerts = async (item: WatchlistItem): Promise<Omit<WatchlistAlert, 'id' | 'timestamp' | 'watchlistItemId' | 'watchlistItemName'> | null> => {
+    const prompt = `
+        You are a proactive sales intelligence analyst. Your task is to scan for a single, highly significant "trigger event" for the company "${item.name}" that has occurred in the last 7 days.
+
+        A trigger event is a new piece of information that creates a compelling reason for a sales team to engage. Focus on these categories in order of importance:
+        1.  **LEADERSHIP:** C-suite executive changes (new CIO, CFO, etc.), or major department head appointments.
+        2.  **FINANCIAL:** Major funding rounds, quarterly earnings announcements (especially if they highlight specific challenges or investments), or significant M&A activity.
+        3.  **PRODUCT:** A major new product launch or a significant product recall/issue.
+        4.  **CLINICAL:** Announcement of new clinical trials (especially Phase II/III), or significant FDA approvals/rejections.
+        5.  **GENERAL:** Any other major news like strategic partnerships or significant negative press.
+
+        Perform a Google Search. If you find a relevant event from the last 7 days, return a single JSON object with the alert details. If you find nothing significant, return the exact string "NO_EVENT".
+
+        The JSON object must have the following schema:
+        - "type": (string) One of: 'FINANCIAL', 'LEADERSHIP', 'CLINICAL', 'PRODUCT', 'GENERAL'.
+        - "title": (string) A concise, one-sentence headline for the alert.
+        - "summary": (string) A 1-2 sentence summary explaining the event and, crucially, *why it matters* as a sales trigger.
+        - "source": (object) An object with "uri" (string, the direct URL to the source article) and "title" (string, the title of the source article).
+
+        Do not include any text, explanations, or markdown formatting before or after the JSON object or the "NO_EVENT" string.
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: {
+                tools: [{ googleSearch: {} }],
+            },
+        });
+        
+        const text = response.text.trim();
+
+        if (text === 'NO_EVENT') {
+            return null;
+        }
+
+        const jsonStr = cleanJsonString(text);
+        const parsed = JSON.parse(jsonStr);
+        
+        // Basic validation
+        if (parsed.type && parsed.title && parsed.summary && parsed.source?.uri) {
+            return parsed;
+        }
+
+        return null;
+
+    } catch (error) {
+        console.error(`Error scanning watchlist for ${item.name}:`, error);
+        return null; // Return null on error to avoid breaking the UI
     }
 };

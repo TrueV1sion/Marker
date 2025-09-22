@@ -1,6 +1,7 @@
 import type { ReportData, SavedReportData } from '../types';
 
 const REPORT_STORE_KEY = 'helios_report_store';
+const REPORTS_UPDATED_EVENT = 'reports-updated';
 
 /**
  * Retrieves the list of saved reports from localStorage.
@@ -24,7 +25,6 @@ export const getSavedReports = (): SavedReportData[] => {
  * @param {ReportData} report - The report to save.
  * @returns {SavedReportData} The saved report object with id and savedAt timestamp.
  */
-// FIX: Modified function to return the SavedReportData object.
 export const saveReport = (report: ReportData): SavedReportData => {
   const savedReport: SavedReportData = {
     ...report,
@@ -36,6 +36,7 @@ export const saveReport = (report: ReportData): SavedReportData => {
     const reports = getSavedReports();
     const updatedReports = [savedReport, ...reports];
     localStorage.setItem(REPORT_STORE_KEY, JSON.stringify(updatedReports));
+    window.dispatchEvent(new Event(REPORTS_UPDATED_EVENT));
   } catch (error) {
     console.error("Failed to save report to localStorage:", error);
   }
@@ -61,6 +62,7 @@ export const updateReport = (id: string, updates: Partial<ReportData>): SavedRep
         reports[reportIndex] = { ...reports[reportIndex], ...updates };
 
         localStorage.setItem(REPORT_STORE_KEY, JSON.stringify(reports));
+        window.dispatchEvent(new Event(REPORTS_UPDATED_EVENT));
         return reports;
     } catch (error) {
         console.error("Failed to update report in localStorage:", error);
@@ -79,6 +81,7 @@ export const deleteReport = (id: string): SavedReportData[] => {
         const reports = getSavedReports();
         const updatedReports = reports.filter(report => report.id !== id);
         localStorage.setItem(REPORT_STORE_KEY, JSON.stringify(updatedReports));
+        window.dispatchEvent(new Event(REPORTS_UPDATED_EVENT));
         return updatedReports;
     } catch (error) {
         console.error("Failed to delete report from localStorage:", error);

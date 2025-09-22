@@ -32,14 +32,19 @@ const ReportLibrary: React.FC<ReportLibraryProps> = ({ onStartPlaybook }) => {
     const [categoryFilter, setCategoryFilter] = useState<ModuleType | 'ALL'>('ALL');
 
     useEffect(() => {
-        setReports(getSavedReports());
+        const fetchReports = () => setReports(getSavedReports());
+        fetchReports(); // Initial fetch
+
+        window.addEventListener('reports-updated', fetchReports);
+        return () => {
+            window.removeEventListener('reports-updated', fetchReports);
+        };
     }, []);
 
     const handleDeleteReport = (id: string, e: React.MouseEvent) => {
         e.stopPropagation(); // Prevent card click event
         if (window.confirm('Are you sure you want to delete this report?')) {
-            const updatedReports = deleteReport(id);
-            setReports(updatedReports);
+            deleteReport(id);
         }
     };
 

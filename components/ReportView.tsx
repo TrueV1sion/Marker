@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { ReportData, ModuleType, SavedReportData } from '../types';
 import { marked } from 'marked';
@@ -58,10 +59,15 @@ const ReportView: React.FC<ReportViewProps> = ({ report, onStartPlaybook }) => {
   const [selectionState, setSelectionState] = useState<{ text: string; position: { top: number; left: number } | null }>({ text: '', position: null });
   const [activeAiAction, setActiveAiAction] = useState<AiActionType | null>(null);
 
-  const parsedContent = marked(currentReport.content, { gfm: true, breaks: true });
+  useEffect(() => {
+    setCurrentReport(report);
+    setActiveTab('overview'); // Reset tab when the report prop changes
+  }, [report]);
+
+  const parsedContent = currentReport ? marked(currentReport.content, { gfm: true, breaks: true }) : '';
   
   const handleSelection = useCallback(() => {
-    if (currentReport.moduleType !== ModuleType.PROSPECT_PROFILE) return;
+    if (!currentReport || currentReport.moduleType !== ModuleType.PROSPECT_PROFILE) return;
 
     const selection = window.getSelection();
     const selectedText = selection?.toString().trim() ?? '';
@@ -86,11 +92,18 @@ const ReportView: React.FC<ReportViewProps> = ({ report, onStartPlaybook }) => {
     if (!activeAiAction) {
       setSelectionState({ text: '', position: null });
     }
-  }, [currentReport.moduleType, activeAiAction]);
+  }, [currentReport, activeAiAction]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-        if (reportBodyRef.current && !reportBodyRef.current.contains(event.target as Node)) {
+        const target = event.target;
+
+        // Do not hide toolbar if clicking on the toolbar itself or on the AI modal
+        if (target instanceof Element && (target.closest('[data-id="text-selection-toolbar"]') || target.closest('[role="dialog"]'))) {
+            return;
+        }
+
+        if (reportBodyRef.current && target instanceof Node && !reportBodyRef.current.contains(target)) {
              setSelectionState({ text: '', position: null });
         }
     };
@@ -110,17 +123,18 @@ const ReportView: React.FC<ReportViewProps> = ({ report, onStartPlaybook }) => {
   };
 
   const handleDomainContentLoaded = (contentKey: keyof ReportData, content: string) => {
+    if (!currentReport) return;
     const update = { [contentKey]: content };
     
     if (currentReport.id) {
         updateReport(currentReport.id, update);
     }
-    setCurrentReport(prev => ({ ...prev, ...update }));
+    setCurrentReport(prev => prev ? ({ ...prev, ...update }) : null);
   };
 
   const handlePrint = () => {
     const printWindow = window.open('', '_blank');
-    if (printWindow && reportContentRef.current) {
+    if (printWindow && reportContentRef.current && currentReport) {
       const reportHtml = reportContentRef.current.innerHTML;
       printWindow.document.write(`
         <html>
@@ -161,7 +175,7 @@ const ReportView: React.FC<ReportViewProps> = ({ report, onStartPlaybook }) => {
   };
   
   const handleExportPDF = async () => {
-    if (!reportContentRef.current) return;
+    if (!reportContentRef.current || !currentReport) return;
     
     setIsExporting(true);
     try {
@@ -209,6 +223,10 @@ const ReportView: React.FC<ReportViewProps> = ({ report, onStartPlaybook }) => {
     }
   };
 
+  if (!currentReport) {
+    return null; // Or a loading/placeholder state
+  }
+
   const renderTabContent = () => {
       const tabConfig = TABS.find(t => t.key === activeTab);
 
@@ -243,8 +261,6 @@ const ReportView: React.FC<ReportViewProps> = ({ report, onStartPlaybook }) => {
 
       // Check if it's a domain intelligence tab
       if ('domain' in tabConfig) {
-          // FIX: The contentKey is always a key of the base ReportData, not the extended SavedReportData.
-          // This resolves the type mismatch when passing contentKey to handleDomainContentLoaded.
           const domainTab = tabConfig as { key: string, title: string, domain: IntelligenceDomain, contentKey: keyof ReportData };
           return (
             <DomainIntelligenceView 
@@ -276,11 +292,11 @@ const ReportView: React.FC<ReportViewProps> = ({ report, onStartPlaybook }) => {
             onClose={handleCloseAiModal}
         />
       )}
-      <div className="bg-white p-8 rounded-lg shadow-lg animate-fade-in" >
+      <div className="bg-white p-4 sm:p-8 rounded-lg shadow-lg animate-fade-in" >
         <div ref={reportContentRef}>
-            <div className="flex justify-between items-start mb-6">
-                <h2 className="text-3xl font-bold text-slate-800">{currentReport.title}</h2>
-                <div className="flex gap-2 no-print">
+            <div className="flex flex-col sm:flex-row justify-between items-start mb-6 gap-4">
+                <h2 className="text-2xl sm:text-3xl font-bold text-slate-800">{currentReport.title}</h2>
+                <div className="flex gap-2 flex-wrap no-print">
                  {currentReport.moduleType === ModuleType.PROSPECT_PROFILE && (
                     <>
                       <button onClick={() => setIsOutreachModalOpen(true)} className="p-2 rounded-md text-slate-500 hover:bg-slate-100 hover:text-sky-500 transition-colors" title="Draft Outreach Email">
@@ -368,13 +384,13 @@ const ReportView: React.FC<ReportViewProps> = ({ report, onStartPlaybook }) => {
             )}
         </div>
       </div>
-      {isPrepModalOpen && (
+      {isPrepModalOpen && currentReport && (
         <MeetingPrepModal
           report={currentReport}
           onClose={() => setIsPrepModalOpen(false)}
         />
       )}
-      {isOutreachModalOpen && (
+      {isOutreachModalOpen && currentReport && (
         <OutreachModal
           report={currentReport}
           onClose={() => setIsOutreachModalOpen(false)}

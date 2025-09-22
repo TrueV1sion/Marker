@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { ChipIcon } from './icons/ChipIcon';
 import { GoogleIcon } from './icons/GoogleIcon';
@@ -12,12 +13,17 @@ const TechnologyFootprint: React.FC<TechnologyFootprintProps> = ({ tech }) => {
     const popoverRef = useRef<HTMLDivElement | null>(null);
     const techRefs = useRef<{ [key: string]: HTMLButtonElement | null }>({});
 
+    // Fix: The type of `event.target` can be `unknown` or a generic `EventTarget`.
+    // This ensures `target` is a `Node` before calling `.contains`, which resolves the type error, especially within callbacks.
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
-            if (popoverRef.current && !popoverRef.current.contains(event.target as Node)) {
-                const isTechButtonClick = Object.values(techRefs.current).some(ref => ref?.contains(event.target as Node));
-                if (!isTechButtonClick) {
-                    setActiveTech(null);
+            const target = event.target;
+            if (target instanceof Node) {
+                if (popoverRef.current && !popoverRef.current.contains(target)) {
+                    const isTechButtonClick = Object.values(techRefs.current).some(ref => ref?.contains(target));
+                    if (!isTechButtonClick) {
+                        setActiveTech(null);
+                    }
                 }
             }
         };

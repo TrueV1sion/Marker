@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { ChatBubbleIcon } from './icons/ChatBubbleIcon';
 import { MicrophoneIcon } from './icons/MicrophoneIcon';
@@ -20,9 +21,11 @@ const actions = [
 const TextSelectionToolbar: React.FC<TextSelectionToolbarProps> = ({ top, left, onAction }) => {
   return (
     <div
+      data-id="text-selection-toolbar"
       className="fixed z-30 bg-slate-800 text-white rounded-lg shadow-lg flex items-center p-1 gap-1 animate-fade-in-fast"
       style={{ top, left, transform: 'translateX(-50%)' }}
       onMouseDown={(e) => e.preventDefault()} // Prevent losing text selection when clicking the toolbar
+      onMouseUp={(e) => e.stopPropagation()} // Stop the mouseup event from bubbling up to the report body
     >
       {actions.map(({ action, icon: Icon, title }) => (
         <button

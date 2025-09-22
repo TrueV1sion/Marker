@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { PlaybookData, ReportData } from '../types';
 import { generateStrategicContent } from '../services/geminiService';
@@ -149,16 +150,16 @@ const DealPlaybook: React.FC<{ initialReport: ReportData | null }> = ({ initialR
     return (
         <div>
             <div className="bg-white p-6 rounded-lg shadow-md mb-8">
-                <div className="flex justify-between items-center mb-4">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
                     <div>
                         <h2 className="text-2xl font-bold text-slate-800 mb-1">Deal Playbook</h2>
                         <p className="text-slate-500">Manage your sales opportunity from discovery to close.</p>
                     </div>
-                     <div className="flex items-center gap-3">
+                     <div className="flex items-center gap-3 w-full md:w-auto">
                         <button
                             onClick={handleSave}
                             disabled={!activeProspect || saveStatus === 'saved'}
-                            className={`flex items-center justify-center px-4 py-2 rounded-md font-semibold transition-colors w-[180px] ${
+                            className={`flex items-center justify-center px-4 py-2 rounded-md font-semibold transition-colors w-full md:w-[180px] ${
                             saveStatus === 'saved'
                                 ? 'bg-green-500 text-white cursor-default'
                                 : 'bg-slate-700 text-white hover:bg-slate-800'
@@ -176,7 +177,7 @@ const DealPlaybook: React.FC<{ initialReport: ReportData | null }> = ({ initialR
                                 </>
                             )}
                         </button>
-                        <button onClick={exportData} disabled={!activeProspect} className="bg-sky-500 text-white px-4 py-2 rounded-md font-semibold hover:bg-sky-600 disabled:bg-slate-300 transition-colors">
+                        <button onClick={exportData} disabled={!activeProspect} className="bg-sky-500 text-white px-4 py-2 rounded-md font-semibold hover:bg-sky-600 disabled:bg-slate-300 transition-colors w-full md:w-auto">
                             Export Playbook
                         </button>
                     </div>

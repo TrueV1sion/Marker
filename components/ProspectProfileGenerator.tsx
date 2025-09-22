@@ -1,28 +1,26 @@
+
 import React, { useState, useCallback } from 'react';
-import { generateContentWithCitations, normalizeProspectName } from '../services/geminiService';
+import { generateContentWithCitations, normalizeProspectName, cleanJsonString } from '../services/geminiService';
 import { addActivity } from '../services/activityTracker';
-import { saveReport, getSavedReports } from '../services/reportStore';
-import { ReportData, ModuleType, ActivityType, SavedReportData } from '../types';
-import ReportView from './ReportView';
+import { createOrUpdateProspectBook, getProspectBookByName } from '../services/prospectBookStore';
+import { ReportData, ModuleType, ActivityType, ProspectBookData } from '../types';
 import Loader from './Loader';
 import { SearchIcon } from './icons/SearchIcon';
 
 interface ProspectProfileGeneratorProps {
   initialProspectName?: string;
-  onStartPlaybook: (report: ReportData) => void;
+  onBookGenerated: (prospectName: string) => void;
 }
 
-const ProspectProfileGenerator: React.FC<ProspectProfileGeneratorProps> = ({ initialProspectName = '', onStartPlaybook }) => {
+const ProspectProfileGenerator: React.FC<ProspectProfileGeneratorProps> = ({ initialProspectName = '', onBookGenerated }) => {
   const [prospectName, setProspectName] = useState<string>(initialProspectName);
-  const [report, setReport] = useState<SavedReportData | null>(null);
-  const [isGeneratingReport, setIsGeneratingReport] = useState<boolean>(false);
+  const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   
-  // State for normalization flow
   const [isNormalizing, setIsNormalizing] = useState<boolean>(false);
   const [confirmation, setConfirmation] = useState<{
     normalizedName: string;
-    existingTitle: string | null;
+    existingBookName: string | null;
   } | null>(null);
 
   const getDefaultPrompt = (nameToGenerate: string) => `Generate a detailed prospect profile for the healthcare organization "${nameToGenerate}".
@@ -75,9 +73,8 @@ const ProspectProfileGenerator: React.FC<ProspectProfileGeneratorProps> = ({ ini
       `;
 
   const executeReportGeneration = useCallback(async (nameToGenerate: string) => {
-    setIsGeneratingReport(true);
+    setIsGenerating(true);
     setError(null);
-    setReport(null);
     
     const prompt = getDefaultPrompt(nameToGenerate);
 
@@ -93,9 +90,10 @@ const ProspectProfileGenerator: React.FC<ProspectProfileGeneratorProps> = ({ ini
       const endIndex = finalContent.indexOf(endMarker);
 
       if (startIndex !== -1 && endIndex !== -1) {
-        const jsonString = finalContent.substring(startIndex + startMarker.length, endIndex).trim();
+        const jsonString = finalContent.substring(startIndex + startMarker.length, endIndex);
         try {
-          const parsedData = JSON.parse(jsonString);
+          const cleanedJsonString = cleanJsonString(jsonString);
+          const parsedData = JSON.parse(cleanedJsonString);
           reportDataExtensions = {
             executiveSummary: parsedData.executiveSummary,
             financialSummary: parsedData.financialSummary,
@@ -105,36 +103,36 @@ const ProspectProfileGenerator: React.FC<ProspectProfileGeneratorProps> = ({ ini
             technologyFootprint: parsedData.technologyFootprint,
             recentNews: parsedData.recentNews,
           };
-          // Remove the JSON block from the main content
           finalContent = finalContent.substring(0, startIndex).trim();
         } catch (e) {
           console.error("Failed to parse structured JSON data:", e);
-          // If parsing fails, leave the content as is so user can see the raw data
         }
       }
       
-      const reportToSave: ReportData = { 
+      const bookData: Omit<ProspectBookData, 'createdAt' | 'updatedAt' | 'prospectName'> = { 
         ...generatedReport, 
         content: finalContent,
         ...reportDataExtensions,
         moduleType: ModuleType.PROSPECT_PROFILE 
       };
 
-      const savedReport = saveReport(reportToSave);
-      setReport(savedReport);
+      createOrUpdateProspectBook(nameToGenerate, bookData);
 
       addActivity({
           type: ActivityType.GENERATION,
-          module: ModuleType.PROSPECT_PROFILE,
+          module: ModuleType.PROSPECT_BOOK,
           details: { primary: nameToGenerate },
       });
+
+      onBookGenerated(nameToGenerate);
+
     } catch (err) {
       setError('An error occurred while generating the report. Please try again.');
       console.error(err);
     } finally {
-      setIsGeneratingReport(false);
+      setIsGenerating(false);
     }
-  }, []);
+  }, [onBookGenerated]);
 
   const handleStartGeneration = useCallback(async () => {
     if (!prospectName.trim()) {
@@ -144,23 +142,18 @@ const ProspectProfileGenerator: React.FC<ProspectProfileGeneratorProps> = ({ ini
 
     setIsNormalizing(true);
     setError(null);
-    setReport(null);
     setConfirmation(null);
 
     try {
       const normalized = await normalizeProspectName(prospectName);
-      const reports = getSavedReports();
-      const searchTitle = `prospect profile: ${normalized.toLowerCase()}`;
-      const existingReport = reports.find(r => r.title.toLowerCase() === searchTitle);
+      const existingBook = await getProspectBookByName(normalized);
 
-      // If name is already good and no report exists, generate immediately.
-      if (prospectName.trim().toLowerCase() === normalized.toLowerCase() && !existingReport) {
+      if (prospectName.trim().toLowerCase() === normalized.toLowerCase() && !existingBook) {
         await executeReportGeneration(normalized);
       } else {
-        // Otherwise, show the confirmation screen
         setConfirmation({
           normalizedName: normalized,
-          existingTitle: existingReport ? existingReport.title : null,
+          existingBookName: existingBook ? existingBook.prospectName : null,
         });
       }
     } catch (err) {
@@ -175,7 +168,7 @@ const ProspectProfileGenerator: React.FC<ProspectProfileGeneratorProps> = ({ ini
     if (!confirmation) return;
     const { normalizedName } = confirmation;
     setConfirmation(null);
-    setProspectName(normalizedName); // Update input field with the standardized name
+    setProspectName(normalizedName);
     await executeReportGeneration(normalizedName);
   };
   
@@ -185,20 +178,20 @@ const ProspectProfileGenerator: React.FC<ProspectProfileGeneratorProps> = ({ ini
     }
   }
   
-  const isBusy = isNormalizing || isGeneratingReport;
+  const isBusy = isNormalizing || isGenerating;
 
   return (
     <div>
       <div className="bg-white p-6 rounded-lg shadow-md mb-8">
         <h2 className="text-2xl font-bold text-slate-800 mb-1">Prospect Profile Generator</h2>
-        <p className="text-slate-500 mb-4">Enter a customer name to generate a comprehensive Helios intelligence report.</p>
+        <p className="text-slate-500 mb-4">Enter a customer name to generate or update their Prospect Book.</p>
         
         {confirmation ? (
           <div className="bg-sky-50 border-l-4 border-sky-500 p-4 rounded-r-lg animate-fade-in">
-            {confirmation.existingTitle && (
+            {confirmation.existingBookName && (
               <div className="bg-amber-100 border border-amber-200 text-amber-800 p-3 rounded-md mb-4">
-                <p className="font-semibold">Potential Duplicate Found</p>
-                <p className="text-sm">A report titled "{confirmation.existingTitle}" already exists. Please check the Report Library before generating a new one.</p>
+                <p className="font-semibold">Existing Prospect Book Found</p>
+                <p className="text-sm">A book for "{confirmation.existingBookName}" already exists. Generating will overwrite the core profile data within the book.</p>
               </div>
             )}
             <p className="text-slate-700 mb-4">
@@ -209,7 +202,7 @@ const ProspectProfileGenerator: React.FC<ProspectProfileGeneratorProps> = ({ ini
                 onClick={handleConfirmAndGenerate}
                 className="flex items-center justify-center bg-sky-500 text-white px-4 py-2 rounded-md font-semibold hover:bg-sky-600 transition-colors"
               >
-                Use Standard Name & Generate
+                {confirmation.existingBookName ? 'Overwrite & Continue' : 'Use Standard Name & Generate'}
               </button>
               <button
                 onClick={() => setConfirmation(null)}
@@ -221,7 +214,7 @@ const ProspectProfileGenerator: React.FC<ProspectProfileGeneratorProps> = ({ ini
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <input
                 type="text"
                 value={prospectName}
@@ -234,7 +227,7 @@ const ProspectProfileGenerator: React.FC<ProspectProfileGeneratorProps> = ({ ini
               <button
                 onClick={handleStartGeneration}
                 disabled={isBusy || !prospectName.trim()}
-                className="flex items-center justify-center bg-sky-500 text-white px-6 py-3 rounded-md font-semibold hover:bg-sky-600 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors w-40"
+                className="flex items-center justify-center bg-sky-500 text-white px-6 py-3 rounded-md font-semibold hover:bg-sky-600 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors w-full sm:w-40"
               >
                 {isBusy ? <Loader /> : <SearchIcon className="h-5 w-5" />}
                 <span className="ml-2">{isNormalizing ? 'Validating...' : 'Generate'}</span>
@@ -245,14 +238,13 @@ const ProspectProfileGenerator: React.FC<ProspectProfileGeneratorProps> = ({ ini
         {error && <p className="text-red-500 mt-2">{error}</p>}
       </div>
 
-      {isGeneratingReport && (
-         <div className="text-center p-8 bg-white rounded-lg shadow-md">
-            <h3 className="text-lg font-semibold text-slate-700">Generating Report...</h3>
-            <p className="text-slate-500">This may take a moment. The AI is analyzing multiple sources.</p>
+      {isGenerating && (
+         <div className="text-center p-8 bg-white rounded-lg shadow-md animate-fade-in">
+            <h3 className="text-lg font-semibold text-slate-700">Generating Prospect Book...</h3>
+            <p className="text-slate-500">This may take a moment. The AI is creating a comprehensive intelligence profile.</p>
          </div>
       )}
 
-      {report && <ReportView report={report} onStartPlaybook={onStartPlaybook} />}
     </div>
   );
 };

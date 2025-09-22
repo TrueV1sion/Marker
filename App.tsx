@@ -1,7 +1,10 @@
 
 import React, { useState, useCallback } from 'react';
 import { ModuleType, ReportData } from './types';
+import { NavGroup, navGroups } from './navigation';
 import Sidebar from './components/Sidebar';
+import MobileNav from './components/MobileNav';
+import Launchpad from './components/Launchpad';
 import ProspectProfileGenerator from './components/ProspectProfileGenerator';
 import CompetitorMatrix from './components/CompetitorMatrix';
 import InternalSearch from './components/InternalSearch';
@@ -14,18 +17,26 @@ import MarketPulse from './components/MarketPulse';
 import ProductGapReport from './components/ProductGapReport';
 import DealPlaybook from './components/DealPlaybook';
 import DiscoveryQuestions from './components/DiscoveryQuestions';
-import { HeliosLogo } from './components/icons/HeliosLogo';
 import Home from './components/Home';
 import ReportTemplates from './components/ReportTemplates';
+import ProspectBook from './components/ProspectBook';
 
 const App: React.FC = () => {
   const [activeModule, setActiveModule] = useState<ModuleType>(ModuleType.HOME);
-  const [initialProspect, setInitialProspect] = useState<string>('');
+  const [initialProspectForProfile, setInitialProspectForProfile] = useState<string>('');
+  const [initialProspectForBook, setInitialProspectForBook] = useState<string>('');
   const [initialReportForPlaybook, setInitialReportForPlaybook] = useState<ReportData | null>(null);
+  const [activeLaunchpadGroup, setActiveLaunchpadGroup] = useState<NavGroup | null>(null);
+
 
   const handleGenerateProfileForLead = useCallback((prospectName: string) => {
-    setInitialProspect(prospectName);
+    setInitialProspectForProfile(prospectName);
     setActiveModule(ModuleType.PROSPECT_PROFILE);
+  }, []);
+
+  const handleBookGenerated = useCallback((prospectName: string) => {
+    setInitialProspectForBook(prospectName);
+    setActiveModule(ModuleType.PROSPECT_BOOK);
   }, []);
   
   const handleStartPlaybook = useCallback((report: ReportData) => {
@@ -35,11 +46,22 @@ const App: React.FC = () => {
     setTimeout(() => setInitialReportForPlaybook(null), 500);
   }, []);
 
+  const handleWatchlistAction = useCallback((action: { type: string, payload: any }) => {
+    if (action.type === 'REFRESH_PROFILE') {
+      handleGenerateProfileForLead(action.payload);
+    }
+    // Future actions like 'UPDATE_PLAYBOOK' can be added here
+  }, [handleGenerateProfileForLead]);
+
   const handleSetActiveModule = (module: ModuleType) => {
     if (module === ModuleType.PROSPECT_PROFILE) {
-      setInitialProspect(''); // Reset when navigating directly to a blank profile
+      setInitialProspectForProfile(''); // Reset when navigating directly to a blank profile
+    }
+    if(module === ModuleType.PROSPECT_BOOK) {
+      setInitialProspectForBook(''); // Reset when navigating directly
     }
     setActiveModule(module);
+    setActiveLaunchpadGroup(null); // Close launchpad on selection
   };
 
 
@@ -48,8 +70,9 @@ const App: React.FC = () => {
       case ModuleType.HOME:
         return <Home setActiveModule={handleSetActiveModule} />;
       case ModuleType.PROSPECT_PROFILE:
-        // Use a key to force re-mount when initialProspect changes, ensuring state is fresh
-        return <ProspectProfileGenerator key={initialProspect || 'default'} initialProspectName={initialProspect} onStartPlaybook={handleStartPlaybook} />;
+        return <ProspectProfileGenerator key={initialProspectForProfile || 'default'} initialProspectName={initialProspectForProfile} onBookGenerated={handleBookGenerated} />;
+      case ModuleType.PROSPECT_BOOK:
+        return <ProspectBook key={initialProspectForBook || 'default'} initialProspectName={initialProspectForBook} onStartPlaybook={handleStartPlaybook} />;
       case ModuleType.LEAD_GENERATION:
         return <LeadGeneration onGenerateProfile={handleGenerateProfileForLead} />;
       case ModuleType.DEAL_PLAYBOOK:
@@ -59,7 +82,7 @@ const App: React.FC = () => {
       case ModuleType.SWOT_ANALYSIS:
         return <SWOTAnalysisGenerator />;
       case ModuleType.MARKET_PULSE:
-        return <MarketPulse />;
+        return <MarketPulse onTriggerAction={handleWatchlistAction} />;
       case ModuleType.DISCOVERY_QUESTIONS:
         return <DiscoveryQuestions />;
       case ModuleType.INTERNAL_KNOWLEDGE:
@@ -77,25 +100,37 @@ const App: React.FC = () => {
       default:
         return <Home setActiveModule={handleSetActiveModule} />;
     }
-  }, [activeModule, initialProspect, handleGenerateProfileForLead, handleStartPlaybook, initialReportForPlaybook]);
+  }, [activeModule, initialProspectForProfile, handleGenerateProfileForLead, handleStartPlaybook, initialReportForPlaybook, handleWatchlistAction, handleBookGenerated, initialProspectForBook]);
 
   return (
     <div className="flex h-screen bg-slate-100 font-sans">
-      <Sidebar activeModule={activeModule} setActiveModule={handleSetActiveModule} />
+      {/* --- Desktop Sidebar --- */}
+      <div className="hidden md:flex">
+        <Sidebar 
+          activeModule={activeModule} 
+          setActiveModule={handleSetActiveModule}
+        />
+      </div>
+
       <main className="flex-1 flex flex-col overflow-hidden">
-        <header className="bg-white border-b border-slate-200 p-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-                <HeliosLogo className="h-8 w-8 text-sky-500" />
-                <div>
-                    <h1 className="text-xl font-bold text-slate-800">Helios</h1>
-                    <p className="text-sm text-slate-500">Healthcare Intelligence & Opportunity Engine</p>
-                </div>
-            </div>
-        </header>
-        <div className="flex-1 p-6 lg:p-8 overflow-y-auto">
+        <div className="flex-1 p-4 md:p-6 lg:p-8 overflow-y-auto pb-24 md:pb-8">
           {renderActiveModule()}
         </div>
       </main>
+
+      {/* --- Mobile Navigation --- */}
+      <div className="md:hidden">
+        <MobileNav 
+          navGroups={navGroups} 
+          onOpenLaunchpad={setActiveLaunchpadGroup} 
+          onNavigate={handleSetActiveModule}
+        />
+        <Launchpad 
+          group={activeLaunchpadGroup}
+          onClose={() => setActiveLaunchpadGroup(null)}
+          onSelectModule={handleSetActiveModule}
+        />
+      </div>
     </div>
   );
 };

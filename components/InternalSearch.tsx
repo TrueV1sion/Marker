@@ -2,7 +2,6 @@ import React, { useState, useCallback } from 'react';
 import { generateInternalKnowledge } from '../services/geminiService';
 import { addActivity } from '../services/activityTracker';
 import { saveReport } from '../services/reportStore';
-// FIX: Import SavedReportData to use the correct type for the report state.
 import { ReportData, ModuleType, ActivityType, SavedReportData } from '../types';
 import ReportView from './ReportView';
 import Loader from './Loader';
@@ -11,7 +10,6 @@ import { UploadIcon } from './icons/UploadIcon';
 
 const InternalSearch: React.FC = () => {
   const [query, setQuery] = useState<string>('');
-  // FIX: Changed state type from ReportData to SavedReportData to match ReportView's expected props.
   const [report, setReport] = useState<SavedReportData | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +35,6 @@ const InternalSearch: React.FC = () => {
       const generatedReport = await generateInternalKnowledge(query);
       const reportToSave: ReportData = { ...generatedReport, moduleType: ModuleType.INTERNAL_KNOWLEDGE };
 
-      // FIX: Use the return value from saveReport to get the complete SavedReportData object.
       const savedReport = saveReport(reportToSave);
       setReport(savedReport);
 

@@ -4,6 +4,7 @@ export enum ModuleType {
   HOME = 'Home',
   PROSPECT_PROFILE = 'Prospect Profile Generator',
   LEAD_GENERATION = 'Lead Generation',
+  PROSPECT_BOOK = 'Prospect Book',
   DEAL_PLAYBOOK = 'Deal Playbook',
   COMPETITOR_MATRIX = 'Competitor Intelligence Matrix',
   SWOT_ANALYSIS = 'SWOT Analysis',
@@ -89,7 +90,14 @@ export interface SavedReportData extends ReportData {
   savedAt: string;
 }
 
-// FIX: Made web property and its nested properties optional to match @google/genai types.
+export interface ProspectBookData extends ReportData {
+  prospectName: string; // This is the unique key
+  createdAt: string;
+  updatedAt: string;
+  notes?: string;
+}
+
+
 export interface GroundingChunk {
   web?: {
     uri?: string;
@@ -121,18 +129,12 @@ export interface RFPAnalysisResult {
   analysis: RFPRequirement[];
 }
 
-export interface MarketTrend {
-  title: string;
-  summary: string;
-  uri: string;
-}
+export type SearchFocus = 'ALL_WEB' | 'CLINICAL' | 'FINANCIAL' | 'NEWS';
 
-export interface MarketPulseSummary {
-  thisYear: string[];
-  lastQuarter: string[];
-  lastMonth: string[];
-  lastWeek: string[];
-  lookingAhead: string[];
+export interface MarketResearchResult {
+  answer: string;
+  relatedQuestions: string[];
+  citations: Citation[];
 }
 
 export type UserPersona = 'Sales Development Rep' | 'Account Executive' | 'Sales Leadership' | 'Market Analyst';
@@ -177,4 +179,26 @@ export interface ReportTemplate {
   isDefault?: boolean;
   job?: string;
   icon?: string;
+}
+
+export interface WatchlistItem {
+  id: string;
+  name: string;
+  type: 'PROSPECT' | 'COMPETITOR' | 'CLIENT';
+}
+
+export type AlertType = 'FINANCIAL' | 'LEADERSHIP' | 'CLINICAL' | 'PRODUCT' | 'GENERAL';
+
+export interface WatchlistAlert {
+  id: string;
+  watchlistItemId: string;
+  watchlistItemName: string;
+  timestamp: string;
+  type: AlertType;
+  title: string;
+  summary: string;
+  source: {
+    uri: string;
+    title: string;
+  };
 }

@@ -96,9 +96,18 @@ const DiscoveryQuestions: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const reports = getSavedReports();
-    const prospectProfiles = reports.filter(r => r.moduleType === ModuleType.PROSPECT_PROFILE);
-    setProspectReports(prospectProfiles);
+    const fetchProspects = () => {
+        const reports = getSavedReports();
+        const prospectProfiles = reports.filter(r => r.moduleType === ModuleType.PROSPECT_PROFILE);
+        setProspectReports(prospectProfiles);
+    };
+    
+    fetchProspects(); // Initial fetch
+
+    window.addEventListener('reports-updated', fetchProspects);
+    return () => {
+        window.removeEventListener('reports-updated', fetchProspects);
+    };
   }, []);
 
   const handleGenerateAnswers = useCallback(async () => {

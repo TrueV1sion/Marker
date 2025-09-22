@@ -2,7 +2,6 @@ import React, { useState, useCallback } from 'react';
 import { analyzeRFP } from '../services/geminiService';
 import { addActivity } from '../services/activityTracker';
 import { saveReport } from '../services/reportStore';
-// FIX: Import SavedReportData to use the correct type for the report state.
 import { RFPAnalysisResult, ModuleType, ActivityType, ReportData, RFPRequirement, SavedReportData } from '../types';
 import Loader from './Loader';
 import { SearchIcon } from './icons/SearchIcon';
@@ -13,7 +12,6 @@ import { WarningIcon } from './icons/WarningIcon';
 const RFPAnalyzer: React.FC = () => {
   const [rfpText, setRfpText] = useState<string>('');
   const [analysis, setAnalysis] = useState<RFPAnalysisResult | null>(null);
-  // FIX: Changed state type from ReportData to SavedReportData to match ReportView's expected props.
   const [report, setReport] = useState<SavedReportData | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,7 +56,6 @@ const RFPAnalyzer: React.FC = () => {
       setAnalysis(result);
       const reportToSave = formatAnalysisForReport(result);
       
-      // FIX: Use the return value from saveReport to get the complete SavedReportData object.
       const savedReport = saveReport(reportToSave);
       setReport(savedReport);
 
