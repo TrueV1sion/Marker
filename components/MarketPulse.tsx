@@ -1,11 +1,11 @@
-
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { fetchMarketTrends, generateMarketPulseSummary, generatePersonalizedInsights } from '../services/geminiService';
 import { MarketTrend, MarketPulseSummary, UserPersona } from '../types';
-import MarketPulseChart from './MarketPulseChart';
 import { marked } from 'marked';
 import { UserIcon } from './icons/UserIcon';
+import { SearchIcon } from './icons/SearchIcon';
+import { CalendarIcon } from './icons/CalendarIcon';
+import { NewspaperIcon } from './icons/NewspaperIcon';
 
 const verticals = [
     "Payer (Insurance)", 
@@ -26,8 +26,9 @@ const MarketPulse: React.FC = () => {
   const [activeVertical, setActiveVertical] = useState<string>(verticals[0]);
   const [trends, setTrends] = useState<MarketTrend[]>([]);
   const [summary, setSummary] = useState<MarketPulseSummary | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [dataLoaded, setDataLoaded] = useState<boolean>(false);
 
   // State for personalized insights
   const [selectedPersona, setSelectedPersona] = useState<UserPersona>(userPersonas[0]);
@@ -56,10 +57,6 @@ const MarketPulse: React.FC = () => {
     }
   }, []);
 
-  useEffect(() => {
-    loadMarketData(activeVertical);
-  }, [activeVertical, loadMarketData]);
-
   // useEffect for insights
   useEffect(() => {
     if (summary) {
@@ -83,6 +80,14 @@ const MarketPulse: React.FC = () => {
 
   const handleVerticalChange = (vertical: string) => {
     setActiveVertical(vertical);
+    if (dataLoaded) {
+        loadMarketData(vertical);
+    }
+  };
+  
+  const handleFetchClick = () => {
+      setDataLoaded(true);
+      loadMarketData(activeVertical);
   };
 
   const summarySections = summary ? [
@@ -137,9 +142,25 @@ const MarketPulse: React.FC = () => {
         </div>
       )}
 
-      {error && <p className="text-red-500 text-center py-4">{error}</p>}
+      {!isLoading && !dataLoaded && (
+        <div className="text-center p-8 bg-white rounded-lg shadow-md animate-fade-in">
+          <h3 className="text-2xl font-bold text-slate-800 mb-2">Ready to Scan the Market</h3>
+          <p className="text-slate-500 mb-6">Select a vertical and click the button to begin analysis.</p>
+          <button
+            onClick={handleFetchClick}
+            className="flex items-center justify-center mx-auto bg-sky-500 text-white px-6 py-3 rounded-md font-semibold hover:bg-sky-600 transition-colors"
+          >
+            <SearchIcon className="h-5 w-5" />
+            <span className="ml-2">Fetch Data for {activeVertical}</span>
+          </button>
+        </div>
+      )}
 
-      {!isLoading && !error && (
+      {!isLoading && dataLoaded && (
+        <>
+        {error && <p className="text-red-500 text-center py-4">{error}</p>}
+
+        {!error && (
         <>
         {(isInsightsLoading || insights || insightsError) && (
             <div className="bg-white p-6 rounded-lg shadow-md mb-8 animate-fade-in">
@@ -164,14 +185,16 @@ const MarketPulse: React.FC = () => {
             </div>
         )}
 
-        {summary && <MarketPulseChart summary={summary} />}
         {summary && (
             <div className="mb-12 animate-fade-in">
                 <h3 className="text-2xl font-bold text-slate-800 mb-6">Market Snapshot</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {summarySections.map((section, index) => (
                         <div key={section.title} className={`bg-white p-6 rounded-lg shadow-md ${index === 4 ? 'md:col-span-2 lg:col-span-1' : ''}`}>
-                            <h4 className="font-bold text-slate-700 mb-3 border-b pb-2">{section.title}</h4>
+                            <h4 className="flex items-center gap-2 font-bold text-slate-700 mb-3 border-b pb-2">
+                                <CalendarIcon className="h-5 w-5 text-slate-500"/>
+                                {section.title}
+                            </h4>
                             <ul className="list-disc list-inside space-y-2 text-slate-600 text-sm">
                                 {section.points.map((point, i) => <li key={i}>{point}</li>)}
                                 {section.points.length === 0 && <li className="text-slate-400 list-none">No key insights found.</li>}
@@ -183,26 +206,33 @@ const MarketPulse: React.FC = () => {
         )}
 
         <div className="space-y-6 animate-fade-in">
-          {trends.length === 0 ? (
+          {trends.length === 0 && summary ? (
             <div className="text-center p-8 bg-white rounded-lg shadow-md">
                 <h3 className="text-lg font-semibold text-slate-700">No Trends Found</h3>
                 <p className="text-slate-500">Could not find recent market trends for this vertical. Please try again later.</p>
             </div>
           ) : (
             <>
-              <h3 className="text-2xl font-bold text-slate-800 mb-6">Key Market Trends</h3>
+              {trends.length > 0 && <h3 className="text-2xl font-bold text-slate-800 mb-6">Key Market Trends</h3>}
               {trends.map((trend, index) => (
               <div key={index} className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow">
-                <h4 className="text-xl font-bold text-slate-800 mb-2">{trend.title}</h4>
-                <p className="text-slate-600 mb-4">{trend.summary}</p>
-                <a 
-                  href={trend.uri} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-sm font-semibold text-sky-600 hover:text-sky-700 hover:underline"
-                >
-                  Read More &rarr;
-                </a>
+                <div className="flex items-start gap-4">
+                    <div className="flex-shrink-0 bg-slate-100 text-slate-500 rounded-lg p-3 mt-1">
+                        <NewspaperIcon className="h-6 w-6"/>
+                    </div>
+                    <div>
+                        <h4 className="text-xl font-bold text-slate-800 mb-2">{trend.title}</h4>
+                        <p className="text-slate-600 mb-4">{trend.summary}</p>
+                        <a 
+                          href={trend.uri} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-sm font-semibold text-sky-600 hover:text-sky-700 hover:underline"
+                        >
+                          Read More &rarr;
+                        </a>
+                    </div>
+                </div>
               </div>
             ))}
             </>
@@ -210,6 +240,8 @@ const MarketPulse: React.FC = () => {
         </div>
         </>
       )}
+      </>
+    )}
     </div>
   );
 };

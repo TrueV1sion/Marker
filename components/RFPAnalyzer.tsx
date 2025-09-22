@@ -1,29 +1,34 @@
-
 import React, { useState, useCallback } from 'react';
 import { analyzeRFP } from '../services/geminiService';
 import { addActivity } from '../services/activityTracker';
 import { saveReport } from '../services/reportStore';
-import { RFPAnalysisResult, ModuleType, ActivityType, ReportData, RFPRequirement } from '../types';
+// FIX: Import SavedReportData to use the correct type for the report state.
+import { RFPAnalysisResult, ModuleType, ActivityType, ReportData, RFPRequirement, SavedReportData } from '../types';
 import Loader from './Loader';
 import { SearchIcon } from './icons/SearchIcon';
 import ReportView from './ReportView';
+import { CheckCircleIcon } from './icons/CheckCircleIcon';
+import { WarningIcon } from './icons/WarningIcon';
 
 const RFPAnalyzer: React.FC = () => {
   const [rfpText, setRfpText] = useState<string>('');
   const [analysis, setAnalysis] = useState<RFPAnalysisResult | null>(null);
-  const [report, setReport] = useState<ReportData | null>(null);
+  // FIX: Changed state type from ReportData to SavedReportData to match ReportView's expected props.
+  const [report, setReport] = useState<SavedReportData | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [isShowingReport, setIsShowingReport] = useState<boolean>(false);
 
   const formatAnalysisForReport = (analysisResult: RFPAnalysisResult): ReportData => {
-    let markdownContent = `Based on the provided document, here is a breakdown of the requirements, suggested answers, and identified gaps:\n\n`;
+    let markdownContent = `Based on the provided document, here is a breakdown of the requirements, suggested answers, and identified gaps.\n\n`;
     
+    markdownContent += `| # | Status | Requirement | Suggested Answer |\n`;
+    markdownContent += `|---|---|---|---|\n`;
+
     analysisResult.analysis.forEach((item, index) => {
-        markdownContent += `### Requirement ${index + 1}: ${item.status === 'GAP' ? '**(GAP IDENTIFIED)**' : ''}\n`;
-        markdownContent += `**Requirement:**\n>${item.requirement.replace(/\n/g, '\n>')}\n\n`;
-        markdownContent += `**Suggested Answer:**\n>${item.suggestedAnswer.replace(/\n/g, '\n>')}\n\n`;
-        markdownContent += `---\n`;
+        const requirementText = item.requirement.replace(/\n/g, '<br />');
+        const answerText = item.suggestedAnswer.replace(/\n/g, '<br />');
+        markdownContent += `| ${index + 1} | ${item.status} | ${requirementText} | ${answerText} |\n`;
     });
 
     const reportTitle = "RFP / Security Questionnaire Analysis";
@@ -51,9 +56,12 @@ const RFPAnalyzer: React.FC = () => {
     try {
       const result = await analyzeRFP(rfpText);
       setAnalysis(result);
-      const generatedReport = formatAnalysisForReport(result);
-      setReport(generatedReport);
-      saveReport(generatedReport);
+      const reportToSave = formatAnalysisForReport(result);
+      
+      // FIX: Use the return value from saveReport to get the complete SavedReportData object.
+      const savedReport = saveReport(reportToSave);
+      setReport(savedReport);
+
       addActivity({
         type: ActivityType.GENERATION,
         module: ModuleType.RFP_ANALYZER,
@@ -84,7 +92,8 @@ const RFPAnalyzer: React.FC = () => {
                     <div className={`p-4 ${item.status === 'GAP' ? 'bg-amber-50' : 'bg-slate-50'}`}>
                         <div className="flex items-center justify-between">
                              <h4 className="font-semibold text-slate-700">Requirement #{index + 1}</h4>
-                             <span className={`px-2 py-1 text-xs font-semibold rounded-full ${item.status === 'GAP' ? 'bg-amber-200 text-amber-800' : 'bg-green-200 text-green-800'}`}>
+                             <span className={`inline-flex items-center gap-2 px-2 py-1 text-xs font-semibold rounded-full ${item.status === 'GAP' ? 'bg-amber-200 text-amber-800' : 'bg-green-200 text-green-800'}`}>
+                                {item.status === 'GAP' ? <WarningIcon className="h-4 w-4" /> : <CheckCircleIcon className="h-4 w-4" />}
                                 {item.status === 'GAP' ? 'Gap Identified' : 'Answered'}
                             </span>
                         </div>

@@ -1,39 +1,35 @@
 import React, { useState, useCallback } from 'react';
-import { generateContentWithCitations } from '../services/geminiService';
+import { generateContentWithCitations, normalizeProspectName } from '../services/geminiService';
 import { addActivity } from '../services/activityTracker';
-import { saveReport } from '../services/reportStore';
-import { ReportData, ModuleType, ActivityType } from '../types';
+import { saveReport, getSavedReports } from '../services/reportStore';
+import { ReportData, ModuleType, ActivityType, SavedReportData } from '../types';
 import ReportView from './ReportView';
 import Loader from './Loader';
 import { SearchIcon } from './icons/SearchIcon';
 
 interface ProspectProfileGeneratorProps {
   initialProspectName?: string;
+  onStartPlaybook: (report: ReportData) => void;
 }
 
-const ProspectProfileGenerator: React.FC<ProspectProfileGeneratorProps> = ({ initialProspectName = '' }) => {
+const ProspectProfileGenerator: React.FC<ProspectProfileGeneratorProps> = ({ initialProspectName = '', onStartPlaybook }) => {
   const [prospectName, setProspectName] = useState<string>(initialProspectName);
-  const [report, setReport] = useState<ReportData | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [report, setReport] = useState<SavedReportData | null>(null);
+  const [isGeneratingReport, setIsGeneratingReport] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // State for normalization flow
+  const [isNormalizing, setIsNormalizing] = useState<boolean>(false);
+  const [confirmation, setConfirmation] = useState<{
+    normalizedName: string;
+    existingTitle: string | null;
+  } | null>(null);
 
-  const handleGenerateReport = useCallback(async () => {
-    if (!prospectName.trim()) {
-      setError('Please enter a prospect name.');
-      return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-    setReport(null);
-
-    const prompt = `Generate a detailed prospect profile for the healthcare organization "${prospectName}".
+  const getDefaultPrompt = (nameToGenerate: string) => `Generate a detailed prospect profile for the healthcare organization "${nameToGenerate}".
       The response must have two parts: a well-structured markdown report and a single JSON data block.
 
       PART 1: COMPREHENSIVE MARKDOWN REPORT
       The report should be detailed and well-written, including the following sections using markdown formatting:
-      - **Executive Summary:** A brief overview of the organization's size, focus, and current market position.
-      - **Financial Summary:** A paragraph summarizing their financial health, including any recent earnings reports or financial announcements.
       - **Key Challenges & Pain Points:** A detailed analysis of the primary challenges the organization is facing.
       - **Strategic Initiatives & Goals:** A description of their publicly stated goals and strategic initiatives.
       - **Technology & Infrastructure:** An overview of their known technology stack, including EHR systems and data platforms.
@@ -44,15 +40,19 @@ const ProspectProfileGenerator: React.FC<ProspectProfileGeneratorProps> = ({ ini
       The JSON block MUST start with the exact marker \`[START_JSON_DATA]\` on a new line and end with the exact marker \`[END_JSON_DATA]\` on a new line. Do not include markdown backticks or the word "json" around the data block.
 
       The JSON object should have the following keys:
-      1.  "keyStats": An object with optional "companySize", "annualRevenue", and "primaryFocus" (string values).
-      2.  "orgChartData": An array of objects for key personnel. Each object must have "name", "title", "bio" (a one-sentence description), and an optional "linkedin" (full URL).
-      3.  "challengesAndInitiatives": An array of objects. Each object must have "type" ('challenge' or 'initiative') and "description" (string).
-      4.  "technologyFootprint": An array of strings listing current technology vendors, EHR systems, or data platforms.
-      5.  "recentNews": An array of objects summarizing recent events. Each object must have "date" (e.g., "YYYY-MM-DD" or "Month YYYY") and "headline" (string).
+      1.  "executiveSummary": "Provide a brief, well-written paragraph overview of the organization's size, focus, and current market position. Following this, act as a senior sales intelligence analyst to synthesize this information. The synthesis must highlight the primary reason this organization is a timely and valuable prospect, touching upon a key challenge or initiative that represents a strategic opportunity and a recent trigger event (e.g., news, financial report) that creates urgency.",
+      2.  "financialSummary": "A paragraph summarizing their financial health, including any recent earnings reports or financial announcements.",
+      3.  "keyStats": An object with optional "companySize", "annualRevenue", and "primaryFocus" (string values).
+      4.  "orgChartData": An array of objects for key personnel. Each object must have "name", "title", "bio" (a one-sentence description), and an optional "linkedin" (full URL).
+      5.  "challengesAndInitiatives": An array of objects. Each object must have "type" ('challenge' or 'initiative') and "description" (string).
+      6.  "technologyFootprint": An array of strings listing current technology vendors, EHR systems, or data platforms.
+      7.  "recentNews": An array of objects summarizing recent events. Each object must have "date" (e.g., "YYYY-MM-DD" or "Month YYYY"), "headline" (string), and an optional "uri" (the direct source URL for the news item). Crucially, identify the single most impactful news item (e.g., a major partnership, acquisition, funding round, or significant product launch) and add the boolean property \`"isImpactful": true\` to that specific object. Only one item in the array should have this flag.
 
       Example of the JSON data block structure:
       [START_JSON_DATA]
       {
+        "executiveSummary": "A brief summary...",
+        "financialSummary": "A summary of finances...",
         "keyStats": {
           "companySize": "10,000+ employees",
           "annualRevenue": "$5 Billion",
@@ -67,14 +67,22 @@ const ProspectProfileGenerator: React.FC<ProspectProfileGeneratorProps> = ({ ini
         ],
         "technologyFootprint": ["Epic Systems", "Salesforce Health Cloud", "AWS"],
         "recentNews": [
-          { "date": "2023-10-26", "headline": "Announced partnership with XYZ Corp to enhance data analytics." }
+          { "date": "2023-10-26", "headline": "Announced partnership with XYZ Corp to enhance data analytics.", "uri": "https://example.com/news-article", "isImpactful": true },
+          { "date": "2023-09-15", "headline": "Released Q3 earnings report.", "uri": "https://example.com/earnings" }
         ]
       }
       [END_JSON_DATA]
       `;
 
+  const executeReportGeneration = useCallback(async (nameToGenerate: string) => {
+    setIsGeneratingReport(true);
+    setError(null);
+    setReport(null);
+    
+    const prompt = getDefaultPrompt(nameToGenerate);
+
     try {
-      const generatedReport = await generateContentWithCitations(prompt, `Prospect Profile: ${prospectName}`);
+      const generatedReport = await generateContentWithCitations(prompt, `Prospect Profile: ${nameToGenerate}`);
       
       let finalContent = generatedReport.content;
       let reportDataExtensions = {};
@@ -89,6 +97,8 @@ const ProspectProfileGenerator: React.FC<ProspectProfileGeneratorProps> = ({ ini
         try {
           const parsedData = JSON.parse(jsonString);
           reportDataExtensions = {
+            executiveSummary: parsedData.executiveSummary,
+            financialSummary: parsedData.financialSummary,
             orgChartData: parsedData.orgChartData,
             keyStats: parsedData.keyStats,
             challengesAndInitiatives: parsedData.challengesAndInitiatives,
@@ -103,70 +113,146 @@ const ProspectProfileGenerator: React.FC<ProspectProfileGeneratorProps> = ({ ini
         }
       }
       
-      const finalReport: ReportData = { 
+      const reportToSave: ReportData = { 
         ...generatedReport, 
         content: finalContent,
         ...reportDataExtensions,
         moduleType: ModuleType.PROSPECT_PROFILE 
       };
 
-      setReport(finalReport);
-      saveReport(finalReport);
+      const savedReport = saveReport(reportToSave);
+      setReport(savedReport);
+
       addActivity({
           type: ActivityType.GENERATION,
           module: ModuleType.PROSPECT_PROFILE,
-          details: { primary: prospectName },
+          details: { primary: nameToGenerate },
       });
-    } catch (err)
- {
+    } catch (err) {
       setError('An error occurred while generating the report. Please try again.');
       console.error(err);
     } finally {
-      setIsLoading(false);
+      setIsGeneratingReport(false);
     }
-  }, [prospectName]);
+  }, []);
+
+  const handleStartGeneration = useCallback(async () => {
+    if (!prospectName.trim()) {
+      setError('Please enter a prospect name.');
+      return;
+    }
+
+    setIsNormalizing(true);
+    setError(null);
+    setReport(null);
+    setConfirmation(null);
+
+    try {
+      const normalized = await normalizeProspectName(prospectName);
+      const reports = getSavedReports();
+      const searchTitle = `prospect profile: ${normalized.toLowerCase()}`;
+      const existingReport = reports.find(r => r.title.toLowerCase() === searchTitle);
+
+      // If name is already good and no report exists, generate immediately.
+      if (prospectName.trim().toLowerCase() === normalized.toLowerCase() && !existingReport) {
+        await executeReportGeneration(normalized);
+      } else {
+        // Otherwise, show the confirmation screen
+        setConfirmation({
+          normalizedName: normalized,
+          existingTitle: existingReport ? existingReport.title : null,
+        });
+      }
+    } catch (err) {
+      setError('An error occurred while normalizing the prospect name. Please try again.');
+      console.error(err);
+    } finally {
+      setIsNormalizing(false);
+    }
+  }, [prospectName, executeReportGeneration]);
+
+  const handleConfirmAndGenerate = async () => {
+    if (!confirmation) return;
+    const { normalizedName } = confirmation;
+    setConfirmation(null);
+    setProspectName(normalizedName); // Update input field with the standardized name
+    await executeReportGeneration(normalizedName);
+  };
   
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
-      handleGenerateReport();
+      handleStartGeneration();
     }
   }
+  
+  const isBusy = isNormalizing || isGeneratingReport;
 
   return (
     <div>
       <div className="bg-white p-6 rounded-lg shadow-md mb-8">
         <h2 className="text-2xl font-bold text-slate-800 mb-1">Prospect Profile Generator</h2>
-        <p className="text-slate-500 mb-4">Enter the name of a potential customer to generate a comprehensive intelligence report.</p>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={prospectName}
-            onChange={(e) => setProspectName(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder="e.g., Blue Shield of California"
-            className="flex-grow p-3 border border-slate-300 rounded-md focus:ring-2 focus:ring-sky-500 focus:outline-none transition"
-            disabled={isLoading}
-          />
-          <button
-            onClick={handleGenerateReport}
-            disabled={isLoading || !prospectName.trim()}
-            className="flex items-center justify-center bg-sky-500 text-white px-6 py-3 rounded-md font-semibold hover:bg-sky-600 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
-          >
-            {isLoading ? <Loader /> : <SearchIcon className="h-5 w-5" />}
-            <span className="ml-2">Generate</span>
-          </button>
-        </div>
+        <p className="text-slate-500 mb-4">Enter a customer name to generate a comprehensive Helios intelligence report.</p>
+        
+        {confirmation ? (
+          <div className="bg-sky-50 border-l-4 border-sky-500 p-4 rounded-r-lg animate-fade-in">
+            {confirmation.existingTitle && (
+              <div className="bg-amber-100 border border-amber-200 text-amber-800 p-3 rounded-md mb-4">
+                <p className="font-semibold">Potential Duplicate Found</p>
+                <p className="text-sm">A report titled "{confirmation.existingTitle}" already exists. Please check the Report Library before generating a new one.</p>
+              </div>
+            )}
+            <p className="text-slate-700 mb-4">
+              We suggest using the standardized name: <strong className="text-slate-900">"{confirmation.normalizedName}"</strong>
+            </p>
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={handleConfirmAndGenerate}
+                className="flex items-center justify-center bg-sky-500 text-white px-4 py-2 rounded-md font-semibold hover:bg-sky-600 transition-colors"
+              >
+                Use Standard Name & Generate
+              </button>
+              <button
+                onClick={() => setConfirmation(null)}
+                className="bg-slate-200 text-slate-700 px-4 py-2 rounded-md font-semibold hover:bg-slate-300 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={prospectName}
+                onChange={(e) => setProspectName(e.target.value)}
+                onKeyPress={handleKeyPress}
+                placeholder="e.g., BCBSM, Blue Cross Michigan"
+                className="flex-grow p-3 border border-slate-300 rounded-md focus:ring-2 focus:ring-sky-500 focus:outline-none transition"
+                disabled={isBusy}
+              />
+              <button
+                onClick={handleStartGeneration}
+                disabled={isBusy || !prospectName.trim()}
+                className="flex items-center justify-center bg-sky-500 text-white px-6 py-3 rounded-md font-semibold hover:bg-sky-600 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors w-40"
+              >
+                {isBusy ? <Loader /> : <SearchIcon className="h-5 w-5" />}
+                <span className="ml-2">{isNormalizing ? 'Validating...' : 'Generate'}</span>
+              </button>
+            </div>
+          </div>
+        )}
         {error && <p className="text-red-500 mt-2">{error}</p>}
       </div>
 
-      {isLoading && (
+      {isGeneratingReport && (
          <div className="text-center p-8 bg-white rounded-lg shadow-md">
             <h3 className="text-lg font-semibold text-slate-700">Generating Report...</h3>
             <p className="text-slate-500">This may take a moment. The AI is analyzing multiple sources.</p>
          </div>
       )}
 
-      {report && <ReportView report={report} />}
+      {report && <ReportView report={report} onStartPlaybook={onStartPlaybook} />}
     </div>
   );
 };

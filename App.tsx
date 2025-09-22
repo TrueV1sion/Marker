@@ -1,6 +1,6 @@
 
 import React, { useState, useCallback } from 'react';
-import { ModuleType } from './types';
+import { ModuleType, ReportData } from './types';
 import Sidebar from './components/Sidebar';
 import ProspectProfileGenerator from './components/ProspectProfileGenerator';
 import CompetitorMatrix from './components/CompetitorMatrix';
@@ -12,15 +12,27 @@ import ReportLibrary from './components/ReportLibrary';
 import RFPAnalyzer from './components/RFPAnalyzer';
 import MarketPulse from './components/MarketPulse';
 import ProductGapReport from './components/ProductGapReport';
+import DealPlaybook from './components/DealPlaybook';
+import DiscoveryQuestions from './components/DiscoveryQuestions';
 import { HeliosLogo } from './components/icons/HeliosLogo';
+import Home from './components/Home';
+import ReportTemplates from './components/ReportTemplates';
 
 const App: React.FC = () => {
-  const [activeModule, setActiveModule] = useState<ModuleType>(ModuleType.PROSPECT_PROFILE);
+  const [activeModule, setActiveModule] = useState<ModuleType>(ModuleType.HOME);
   const [initialProspect, setInitialProspect] = useState<string>('');
+  const [initialReportForPlaybook, setInitialReportForPlaybook] = useState<ReportData | null>(null);
 
   const handleGenerateProfileForLead = useCallback((prospectName: string) => {
     setInitialProspect(prospectName);
     setActiveModule(ModuleType.PROSPECT_PROFILE);
+  }, []);
+  
+  const handleStartPlaybook = useCallback((report: ReportData) => {
+    setInitialReportForPlaybook(report);
+    setActiveModule(ModuleType.DEAL_PLAYBOOK);
+    // Reset after a short delay to allow DealPlaybook to consume the prop
+    setTimeout(() => setInitialReportForPlaybook(null), 500);
   }, []);
 
   const handleSetActiveModule = (module: ModuleType) => {
@@ -33,17 +45,23 @@ const App: React.FC = () => {
 
   const renderActiveModule = useCallback(() => {
     switch (activeModule) {
+      case ModuleType.HOME:
+        return <Home setActiveModule={handleSetActiveModule} />;
       case ModuleType.PROSPECT_PROFILE:
         // Use a key to force re-mount when initialProspect changes, ensuring state is fresh
-        return <ProspectProfileGenerator key={initialProspect || 'default'} initialProspectName={initialProspect} />;
+        return <ProspectProfileGenerator key={initialProspect || 'default'} initialProspectName={initialProspect} onStartPlaybook={handleStartPlaybook} />;
       case ModuleType.LEAD_GENERATION:
         return <LeadGeneration onGenerateProfile={handleGenerateProfileForLead} />;
+      case ModuleType.DEAL_PLAYBOOK:
+        return <DealPlaybook initialReport={initialReportForPlaybook} />;
       case ModuleType.COMPETITOR_MATRIX:
         return <CompetitorMatrix />;
       case ModuleType.SWOT_ANALYSIS:
         return <SWOTAnalysisGenerator />;
       case ModuleType.MARKET_PULSE:
         return <MarketPulse />;
+      case ModuleType.DISCOVERY_QUESTIONS:
+        return <DiscoveryQuestions />;
       case ModuleType.INTERNAL_KNOWLEDGE:
         return <InternalSearch />;
       case ModuleType.RFP_ANALYZER:
@@ -53,11 +71,13 @@ const App: React.FC = () => {
       case ModuleType.ACTIVITY_DASHBOARD:
         return <ActivityDashboard />;
       case ModuleType.REPORT_LIBRARY:
-        return <ReportLibrary />;
+        return <ReportLibrary onStartPlaybook={handleStartPlaybook} />;
+      case ModuleType.REPORT_TEMPLATES:
+        return <ReportTemplates />;
       default:
-        return <ProspectProfileGenerator key="default" />;
+        return <Home setActiveModule={handleSetActiveModule} />;
     }
-  }, [activeModule, initialProspect, handleGenerateProfileForLead]);
+  }, [activeModule, initialProspect, handleGenerateProfileForLead, handleStartPlaybook, initialReportForPlaybook]);
 
   return (
     <div className="flex h-screen bg-slate-100 font-sans">

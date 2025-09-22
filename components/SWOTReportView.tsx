@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useRef } from 'react';
 import { marked } from 'marked';
 import jsPDF from 'jspdf';
@@ -8,6 +7,10 @@ import Loader from './Loader';
 import { PrintIcon } from './icons/PrintIcon';
 import { ShareIcon } from './icons/ShareIcon';
 import { ExportIcon } from './icons/ExportIcon';
+import { ThumbsUpIcon } from './icons/ThumbsUpIcon';
+import { ThumbsDownIcon } from './icons/ThumbsDownIcon';
+import { UpArrowIcon } from './icons/UpArrowIcon';
+import { ShieldIcon } from './icons/ShieldIcon';
 
 interface SWOTReportViewProps {
   report: ReportData;
@@ -128,19 +131,31 @@ const SWOTReportView: React.FC<SWOTReportViewProps> = ({ report }) => {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded-r-lg">
-                <h3 className="text-xl font-bold text-green-800 mb-2">Strengths</h3>
+                <h3 className="flex items-center gap-2 text-xl font-bold text-green-800 mb-2">
+                    <ThumbsUpIcon className="h-6 w-6" />
+                    Strengths
+                </h3>
                 <div className="prose prose-sm max-w-none prose-slate" dangerouslySetInnerHTML={{ __html: parsedSWOT.strengths }} />
             </div>
             <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg">
-                <h3 className="text-xl font-bold text-red-800 mb-2">Weaknesses</h3>
+                <h3 className="flex items-center gap-2 text-xl font-bold text-red-800 mb-2">
+                    <ThumbsDownIcon className="h-6 w-6" />
+                    Weaknesses
+                </h3>
                 <div className="prose prose-sm max-w-none prose-slate" dangerouslySetInnerHTML={{ __html: parsedSWOT.weaknesses }} />
             </div>
             <div className="bg-sky-50 border-l-4 border-sky-500 p-4 rounded-r-lg">
-                <h3 className="text-xl font-bold text-sky-800 mb-2">Opportunities</h3>
+                <h3 className="flex items-center gap-2 text-xl font-bold text-sky-800 mb-2">
+                    <UpArrowIcon className="h-6 w-6" />
+                    Opportunities
+                </h3>
                 <div className="prose prose-sm max-w-none prose-slate" dangerouslySetInnerHTML={{ __html: parsedSWOT.opportunities }} />
             </div>
             <div className="bg-amber-50 border-l-4 border-amber-500 p-4 rounded-r-lg">
-                <h3 className="text-xl font-bold text-amber-800 mb-2">Threats</h3>
+                <h3 className="flex items-center gap-2 text-xl font-bold text-amber-800 mb-2">
+                    <ShieldIcon className="h-6 w-6" />
+                    Threats
+                </h3>
                 <div className="prose prose-sm max-w-none prose-slate" dangerouslySetInnerHTML={{ __html: parsedSWOT.threats }} />
             </div>
         </div>

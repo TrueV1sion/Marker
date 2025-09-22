@@ -1,11 +1,23 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import type { ReportData, Citation, GroundingChunk, LeadGenerationResult, EmailData, RFPAnalysisResult, MarketTrend, MarketPulseSummary, RFPRequirement, UserPersona, TalkingPointsResult } from '../types';
+import type { ReportData, Citation, GroundingChunk, LeadGenerationResult, EmailData, RFPAnalysisResult, MarketTrend, MarketPulseSummary, RFPRequirement, UserPersona, TalkingPointsResult, SavedReportData } from '../types';
 
 if (!process.env.API_KEY) {
     console.error("API_KEY environment variable not set.");
 }
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+
+export interface AnsweredQuestion {
+  question: string;
+  answer: string;
+  status: 'ANSWERED' | 'NOT_FOUND';
+}
+
+export interface AnsweredQuestionCategory {
+  category: string;
+  questions: AnsweredQuestion[];
+}
+
 
 const processCitations = (groundingChunks: GroundingChunk[] | undefined): Citation[] => {
     if (!groundingChunks) return [];
@@ -24,14 +36,67 @@ const processCitations = (groundingChunks: GroundingChunk[] | undefined): Citati
 };
 
 const cleanJsonString = (text: string): string => {
+    // First, remove markdown fences if they exist.
     let jsonStr = text.trim();
     if (jsonStr.startsWith('```json')) {
       jsonStr = jsonStr.substring(7, jsonStr.length - 3).trim();
     } else if (jsonStr.startsWith('```')) {
       jsonStr = jsonStr.substring(3, jsonStr.length - 3).trim();
     }
-    return jsonStr;
-}
+
+    // Find the first occurrence of '{' or '['
+    const firstCurly = jsonStr.indexOf('{');
+    const firstBracket = jsonStr.indexOf('[');
+    let startIndex = -1;
+
+    if (firstCurly > -1 && firstBracket > -1) {
+        startIndex = Math.min(firstCurly, firstBracket);
+    } else if (firstCurly > -1) {
+        startIndex = firstCurly;
+    } else {
+        startIndex = firstBracket;
+    }
+
+    if (startIndex === -1) {
+        return jsonStr; // No JSON structure found, return original for parser to handle.
+    }
+
+    // Find the last occurrence of '}' or ']'
+    const lastCurly = jsonStr.lastIndexOf('}');
+    const lastBracket = jsonStr.lastIndexOf(']');
+    const endIndex = Math.max(lastCurly, lastBracket);
+
+    if (endIndex === -1 || endIndex < startIndex) {
+        return jsonStr; // Invalid or incomplete JSON structure
+    }
+    
+    return jsonStr.substring(startIndex, endIndex + 1);
+};
+
+export const normalizeProspectName = async (userInput: string): Promise<string> => {
+    const prompt = `Given the user input "${userInput}", what is the full, formal, and official name of this organization? Return ONLY the official name and absolutely nothing else. For example, if the input is "BCBSM", the output should be "Blue Cross Blue Shield of Michigan".`;
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: {
+                // Disable thinking for this simple, fast task.
+                thinkingConfig: { thinkingBudget: 0 }
+            }
+        });
+        const normalizedName = response.text.trim();
+        if (!normalizedName) {
+            // If the AI returns nothing, fall back to the user's input to avoid breaking the flow.
+            return userInput;
+        }
+        return normalizedName;
+    } catch (error) {
+        console.error("Error in normalizeProspectName:", error);
+        // Fallback to original input on error to prevent breaking the user flow
+        return userInput;
+    }
+};
+
 
 export const generateContentWithCitations = async (prompt: string, title: string): Promise<ReportData> => {
     try {
@@ -64,13 +129,27 @@ export const generateLeads = async (criteria: {
   keywords: string;
 }): Promise<LeadGenerationResult> => {
   const { vertical, location, keywords } = criteria;
+  
+  // Enhance the vertical description if it's "Medical Devices"
+  let finalVertical = vertical;
+  if (vertical === "Medical Devices") {
+      finalVertical = "Medical Devices, including Durable Medical Equipment (DME) and related vendors";
+  }
+
+  // Build the criteria part of the prompt dynamically
+  const criteriaParts = [`- Industry Vertical: ${finalVertical}`];
+  if (location.trim()) {
+    criteriaParts.push(`- Location: ${location}`);
+  }
+  if (keywords.trim()) {
+    criteriaParts.push(`- Keywords/Pain Points: ${keywords}`);
+  }
+
   const prompt = `Act as an expert market research analyst for the healthcare data industry. Your task is to identify potential sales leads.
 The ideal customer profile is:
-- Industry Vertical: ${vertical}
-- Location: ${location}
-- Keywords/Pain Points: ${keywords}
+${criteriaParts.join('\n')}
 
-Use Google Search to find 5 to 10 companies that match this profile. For each company, provide a brief, compelling one-sentence reason why they are a good fit as a prospect, tailored to the keywords. Do not list more than 10 companies.
+Use Google Search to find 5 to 10 companies that match this profile. For each company, provide a brief, compelling one-sentence reason why they are a good fit as a prospect${keywords.trim() ? ', tailored to the keywords' : ''}. Do not list more than 10 companies.
 
 Your final response MUST be a single, valid JSON object with a single key "leads". The value of "leads" should be an array of objects, where each object has two keys: "companyName" (string) and "reason" (string).
 Do not include any text, explanations, or markdown formatting before or after the JSON object.
@@ -545,5 +624,326 @@ export const generateTalkingPointsForChallenge = async (
     } catch (error) {
         console.error("Error in generateTalkingPointsForChallenge:", error);
         throw new Error('Failed to generate talking points from Gemini API.');
+    }
+};
+
+export const generateStrategicContent = async (context: string, fieldLabel: string): Promise<string> => {
+    const prompt = `
+        You are a senior sales strategist and copywriter. Based on the provided context about a sales deal,
+        your task is to write a concise and compelling entry for the following field: **${fieldLabel}**.
+
+        **Deal Context:**
+        ---
+        ${context}
+        ---
+
+        Generate a well-written paragraph for the "${fieldLabel}" field. Your response should be plain text, not markdown or JSON.
+        It should be directly usable in a sales playbook document.
+    `;
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+        });
+
+        const content = response.text;
+        if (!content) {
+            throw new Error('Received an empty response from the AI.');
+        }
+
+        return content;
+    } catch (error) {
+        console.error(`Error generating content for ${fieldLabel}:`, error);
+        throw new Error('Failed to generate strategic content from Gemini API.');
+    }
+};
+
+export type IntelligenceDomain = 'Quality' | 'Risk' | 'Care Models' | 'Pharmacy' | 'Hospital Networks' | 'Employer Groups';
+
+export const generateDomainIntelligence = async (prospectName: string, domain: IntelligenceDomain, context: string): Promise<string> => {
+    let prompt;
+
+    const basePrompt = `
+        Act as a sales intelligence expert for a healthcare data analytics company selling to payers.
+        The prospect is the healthcare organization "${prospectName}".
+        A general intelligence report has been provided as context below.
+        Use Google Search to find specific, up-to-date information.
+    `;
+    
+    const contextSection = `
+        ---
+        CONTEXT:
+        ${context}
+        ---
+    `;
+
+    switch (domain) {
+        case 'Quality':
+            prompt = `
+                ${basePrompt}
+                Your task is to generate a "Quality Intelligence Briefing".
+                Focus on their latest CMS Star Ratings (if applicable), HEDIS performance, any public-facing quality improvement initiatives, and their readiness for digital quality measures (dQMs) as pushed by NCQA.
+
+                Structure the output in markdown with these exact section headers: **Current Performance**, **Inferred Pain Points**, and **Strategic Opportunities**.
+                ${contextSection}
+            `;
+            break;
+        case 'Risk':
+            prompt = `
+                ${basePrompt}
+                Your task is to generate a "Risk Intelligence Briefing".
+                Focus on the lines of business they operate in (Medicare Advantage, ACA, Managed Medicaid), any news related to their risk adjustment practices, common challenges in those markets, and any mention of RADV audits.
+
+                Structure the output in markdown with these exact section headers: **Risk Program Footprint**, **Inferred Pain Points**, and **Strategic Opportunities**.
+                ${contextSection}
+            `;
+            break;
+        case 'Care Models':
+             prompt = `
+                ${basePrompt}
+                Your task is to generate a "Care Models Intelligence Briefing".
+                Focus on their involvement in Accountable Care Organizations (ACOs), Patient-Centered Medical Homes (PCMH), Value-Based Care (VBC) arrangements, and special programs for chronic conditions (e.g., diabetes, COPD). Also, investigate their telehealth and population health strategies.
+
+                Structure the output in markdown with these exact section headers: **Key Care Delivery Programs**, **Inferred Pain Points**, and **Strategic Opportunities**.
+                ${contextSection}
+            `;
+            break;
+        case 'Pharmacy':
+             prompt = `
+                ${basePrompt}
+                Your task is to generate a "Pharmacy Intelligence Briefing".
+                Focus on their Pharmacy Benefit Manager (PBM), their drug formulary design, specialty pharmacy strategy, and any initiatives related to managing high-cost drugs or improving medication adherence.
+
+                Structure the output in markdown with these exact section headers: **Pharmacy Strategy Overview**, **Inferred Pain Points**, and **Strategic Opportunities**.
+                ${contextSection}
+            `;
+            break;
+        case 'Hospital Networks':
+             prompt = `
+                ${basePrompt}
+                Your task is to generate a "Hospital & Provider Network Intelligence Briefing".
+                Focus on the network's composition (size, key hospital system partnerships), adequacy, and overall strategy (e.g., broad PPO vs. narrow/high-performance networks). Note any recent news about network expansions or provider disputes.
+
+                Structure the output in markdown with these exact section headers: **Provider Network Overview**, **Inferred Pain Points**, and **Strategic Opportunities**.
+                ${contextSection}
+            `;
+            break;
+        case 'Employer Groups':
+             prompt = `
+                ${basePrompt}
+                Your task is to generate an "Employer Groups Intelligence Briefing", focusing on their commercial line of business.
+                Focus on the types of plans they offer to employers (e.g., fully-insured, self-funded/ASO), wellness programs, and any digital health tools they provide to employee populations.
+
+                Structure the output in markdown with these exact section headers: **Commercial Offerings**, **Inferred Pain Points**, and **Strategic Opportunities**.
+                ${contextSection}
+            `;
+            break;
+        default:
+             throw new Error(`Unsupported domain: ${domain}`);
+    }
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: {
+                tools: [{ googleSearch: {} }],
+            },
+        });
+
+        const intelligence = response.text;
+        if (!intelligence) {
+            throw new Error(`Received an empty response from the AI for ${domain} intelligence.`);
+        }
+        return intelligence;
+    } catch (error) {
+        console.error(`Error generating domain intelligence for ${domain}:`, error);
+        throw new Error(`Failed to generate ${domain} intelligence from Gemini API.`);
+    }
+};
+
+export const generateWeeklyBriefing = async (reports: SavedReportData[]): Promise<string> => {
+    const reportSummaries = reports.map(r => ({
+        title: r.title,
+        module: r.moduleType,
+        savedAt: r.savedAt,
+        summary: r.executiveSummary || r.content.substring(0, 200) + '...'
+    }));
+
+    const prompt = `
+        You are a senior sales intelligence analyst. Your task is to provide a high-level weekly briefing for a user based on the reports they generated in the Helios application over the past 7 days.
+
+        Below is a JSON object containing summaries of the reports generated.
+        Analyze these reports and generate a concise, actionable summary that highlights:
+        1.  **Key Themes:** What were the dominant topics or companies researched this week?
+        2.  **Major Findings:** What are the 1-2 most important takeaways from the reports (e.g., a major competitor weakness, a significant prospect initiative)?
+        3.  **Suggested Next Steps:** Based on the findings, recommend 1-2 concrete actions the user should take next week (e.g., "Follow up with Prospect X regarding their digital transformation initiative," or "Focus prospecting on payers struggling with Risk Adjustment.").
+
+        The final output should be a well-structured markdown text. Use headings and bullet points. Do not refer to the user in the second person (e.g., "You researched..."). Instead, use phrases like "The focus this week was on...".
+
+        **Report Data:**
+        ---
+        ${JSON.stringify(reportSummaries, null, 2)}
+        ---
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+        });
+
+        const briefing = response.text;
+        if (!briefing) {
+            throw new Error('Received an empty response from the AI for the weekly briefing.');
+        }
+        return briefing;
+    } catch (error) {
+        console.error("Error in generateWeeklyBriefing:", error);
+        throw new Error('Failed to generate weekly briefing from Gemini API.');
+    }
+};
+
+export const explainText = async (text: string): Promise<string> => {
+    const prompt = `Explain the following concept from a healthcare industry report in simple, clear terms, as if for a new sales representative. Keep the explanation concise and to the point.
+    
+    Concept: "${text}"`;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+        });
+        const explanation = response.text;
+        if (!explanation) {
+            throw new Error('Received an empty response from the AI.');
+        }
+        return explanation;
+    } catch (error) {
+        console.error("Error in explainText:", error);
+        throw new Error('Failed to generate explanation from Gemini API.');
+    }
+};
+
+export const generateTalkingPoint = async (text: string): Promise<string> => {
+    const prompt = `Based on this piece of information from a prospect report: "${text}", generate a single, concise talking point that a sales representative could use in a meeting. The talking point should be actionable and directly relate to the information provided.`;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+        });
+        const talkingPoint = response.text;
+        if (!talkingPoint) {
+            throw new Error('Received an empty response from the AI.');
+        }
+        return talkingPoint;
+    } catch (error) {
+        console.error("Error in generateTalkingPoint:", error);
+        throw new Error('Failed to generate talking point from Gemini API.');
+    }
+};
+
+export const generateEmailSnippet = async (text: string): Promise<string> => {
+    const prompt = `Using this information from a prospect report as a hook: "${text}", write a short, personalized snippet (1-2 sentences) for an outreach email. The snippet should sound natural, professional, and lead into a value proposition.`;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+        });
+        const snippet = response.text;
+        if (!snippet) {
+            throw new Error('Received an empty response from the AI.');
+        }
+        return snippet;
+    } catch (error) {
+        console.error("Error in generateEmailSnippet:", error);
+        throw new Error('Failed to generate email snippet from Gemini API.');
+    }
+};
+
+export const answerDiscoveryQuestions = async (
+    report: ReportData,
+    questionCategories: { [key: string]: string[] }
+): Promise<AnsweredQuestionCategory[]> => {
+    const allQuestions = Object.entries(questionCategories).flatMap(([category, questions]) =>
+        questions.map(q => ({ category, question: q }))
+    );
+
+    const prompt = `
+        You are an expert sales analyst. You have been provided with a detailed intelligence report on a prospect.
+        Your task is to review the report and answer a list of standard discovery questions based ONLY on the information available in the report.
+
+        For each question, determine if the report contains a direct or strongly implied answer.
+        - If an answer is found, provide a concise answer and set the status to "ANSWERED".
+        - If the information is not present in the report, state "Information not found in report." as the answer and set the status to "NOT_FOUND".
+
+        **Intelligence Report on ${report.title}:**
+        ---
+        **Main Content:** ${report.content}
+        **Executive Summary:** ${report.executiveSummary || 'N/A'}
+        **Financial Summary:** ${report.financialSummary || 'N/A'}
+        **Key Stats:** ${JSON.stringify(report.keyStats) || 'N/A'}
+        **Challenges & Initiatives:** ${JSON.stringify(report.challengesAndInitiatives) || 'N/A'}
+        **Recent News:** ${JSON.stringify(report.recentNews) || 'N/A'}
+        **Technology Footprint:** ${JSON.stringify(report.technologyFootprint) || 'N/A'}
+        ---
+
+        **Discovery Questions to Answer:**
+        ---
+        ${JSON.stringify(allQuestions.map(q => q.question), null, 2)}
+        ---
+
+        Return your response as a single, valid JSON object with a single key "answeredQuestions".
+        The value should be an array of objects, where each object represents a category and has two keys: "category" (string) and "questions" (an array of objects).
+        Each object in the "questions" array must have three keys: "question" (string, the original question), "answer" (string), and "status" (string, either "ANSWERED" or "NOT_FOUND").
+        Maintain the original categories from the input. Do not include any text, explanations, or markdown formatting before or after the JSON object.
+    `;
+
+    const responseSchema = {
+        type: Type.OBJECT,
+        properties: {
+            answeredQuestions: {
+                type: Type.ARRAY,
+                items: {
+                    type: Type.OBJECT,
+                    properties: {
+                        category: { type: Type.STRING },
+                        questions: {
+                            type: Type.ARRAY,
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    question: { type: Type.STRING },
+                                    answer: { type: Type.STRING },
+                                    status: { type: Type.STRING },
+                                },
+                                required: ["question", "answer", "status"],
+                            }
+                        }
+                    },
+                    required: ["category", "questions"],
+                }
+            }
+        },
+        required: ["answeredQuestions"]
+    };
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: {
+                responseMimeType: 'application/json',
+                responseSchema,
+            }
+        });
+        const jsonStr = cleanJsonString(response.text);
+        const parsed = JSON.parse(jsonStr);
+        return parsed.answeredQuestions || [];
+    } catch (error) {
+        console.error("Error in answerDiscoveryQuestions:", error);
+        throw new Error('Failed to generate answers for discovery questions from Gemini API.');
     }
 };

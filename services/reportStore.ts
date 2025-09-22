@@ -22,22 +22,52 @@ export const getSavedReports = (): SavedReportData[] => {
 /**
  * Saves a new report to the store in localStorage.
  * @param {ReportData} report - The report to save.
+ * @returns {SavedReportData} The saved report object with id and savedAt timestamp.
  */
-export const saveReport = (report: ReportData): void => {
+// FIX: Modified function to return the SavedReportData object.
+export const saveReport = (report: ReportData): SavedReportData => {
+  const savedReport: SavedReportData = {
+    ...report,
+    id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    savedAt: new Date().toISOString(),
+  };
+
   try {
     const reports = getSavedReports();
-    const savedReport: SavedReportData = {
-      ...report,
-      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      savedAt: new Date().toISOString(),
-    };
-    
     const updatedReports = [savedReport, ...reports];
     localStorage.setItem(REPORT_STORE_KEY, JSON.stringify(updatedReports));
   } catch (error) {
     console.error("Failed to save report to localStorage:", error);
   }
+  return savedReport;
 };
+
+/**
+ * Updates an existing report in the store.
+ * @param {string} id - The ID of the report to update.
+ * @param {Partial<ReportData>} updates - An object containing the fields to update.
+ * @returns {SavedReportData[] | null} The updated list of reports, or null if the report wasn't found.
+ */
+export const updateReport = (id: string, updates: Partial<ReportData>): SavedReportData[] | null => {
+    try {
+        const reports = getSavedReports();
+        const reportIndex = reports.findIndex(report => report.id === id);
+
+        if (reportIndex === -1) {
+            console.warn(`Report with id ${id} not found for update.`);
+            return null;
+        }
+
+        reports[reportIndex] = { ...reports[reportIndex], ...updates };
+
+        localStorage.setItem(REPORT_STORE_KEY, JSON.stringify(reports));
+        return reports;
+    } catch (error) {
+        console.error("Failed to update report in localStorage:", error);
+        return getSavedReports();
+    }
+};
+
 
 /**
  * Deletes a report from the store in localStorage by its ID.

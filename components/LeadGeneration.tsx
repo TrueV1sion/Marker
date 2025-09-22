@@ -1,4 +1,5 @@
 
+
 import React, { useState, useCallback } from 'react';
 import { generateLeads } from '../services/geminiService';
 import { addActivity } from '../services/activityTracker';
@@ -28,11 +29,6 @@ const LeadGeneration: React.FC<LeadGenerationProps> = ({ onGenerateProfile }) =>
   const [error, setError] = useState<string | null>(null);
 
   const handleFindProspects = useCallback(async () => {
-    if (!location.trim() || !keywords.trim()) {
-      setError('Please provide both location and keywords.');
-      return;
-    }
-
     setIsLoading(true);
     setError(null);
     setResult(null);
@@ -44,7 +40,7 @@ const LeadGeneration: React.FC<LeadGenerationProps> = ({ onGenerateProfile }) =>
       addActivity({
         type: ActivityType.GENERATION,
         module: ModuleType.LEAD_GENERATION,
-        details: { primary: `Search for ${keywords}` },
+        details: { primary: `Search: ${vertical}${location ? ` in ${location}`: ''}${keywords ? ` for ${keywords}` : ''}` },
       });
     } catch (err) {
       setError('An error occurred while finding prospects. Please try again.');
@@ -73,18 +69,18 @@ const LeadGeneration: React.FC<LeadGenerationProps> = ({ onGenerateProfile }) =>
                 </select>
             </div>
             <div>
-                <label htmlFor="location" className="block text-sm font-medium text-slate-700 mb-1">Location</label>
+                <label htmlFor="location" className="block text-sm font-medium text-slate-700 mb-1">Location <span className="text-slate-400">(Optional)</span></label>
                 <input type="text" id="location" value={location} onChange={(e) => setLocation(e.target.value)} onKeyPress={handleKeyPress} placeholder="e.g., California, USA" className="w-full p-3 border border-slate-300 rounded-md focus:ring-2 focus:ring-sky-500 focus:outline-none transition" disabled={isLoading} />
             </div>
             <div>
-                <label htmlFor="keywords" className="block text-sm font-medium text-slate-700 mb-1">Keywords / Pain Points</label>
+                <label htmlFor="keywords" className="block text-sm font-medium text-slate-700 mb-1">Keywords / Pain Points <span className="text-slate-400">(Optional)</span></label>
                 <input type="text" id="keywords" value={keywords} onChange={(e) => setKeywords(e.target.value)} onKeyPress={handleKeyPress} placeholder="e.g., data analytics, value-based care" className="w-full p-3 border border-slate-300 rounded-md focus:ring-2 focus:ring-sky-500 focus:outline-none transition" disabled={isLoading} />
             </div>
         </div>
         <div className="flex justify-end">
           <button
             onClick={handleFindProspects}
-            disabled={isLoading || !location.trim() || !keywords.trim()}
+            disabled={isLoading}
             className="flex items-center justify-center bg-sky-500 text-white px-6 py-3 rounded-md font-semibold hover:bg-sky-600 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
           >
             {isLoading ? <Loader /> : <SearchIcon className="h-5 w-5" />}

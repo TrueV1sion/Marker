@@ -1,16 +1,20 @@
 import { ModuleType as AppModuleType } from './types';
 
 export enum ModuleType {
+  HOME = 'Home',
   PROSPECT_PROFILE = 'Prospect Profile Generator',
   LEAD_GENERATION = 'Lead Generation',
+  DEAL_PLAYBOOK = 'Deal Playbook',
   COMPETITOR_MATRIX = 'Competitor Intelligence Matrix',
   SWOT_ANALYSIS = 'SWOT Analysis',
   MARKET_PULSE = 'Market Pulse',
+  DISCOVERY_QUESTIONS = 'Discovery Questions',
   INTERNAL_KNOWLEDGE = 'Internal Knowledge Search',
   RFP_ANALYZER = 'RFP & Security Analyzer',
   ACTIVITY_DASHBOARD = 'Activity Dashboard',
   REPORT_LIBRARY = 'Report Library',
   PRODUCT_GAP_ANALYSIS = 'Product Gap Analysis',
+  REPORT_TEMPLATES = 'Report Templates',
 }
 
 export enum ActivityType {
@@ -56,6 +60,8 @@ export interface ChallengeOrInitiative {
 export interface NewsItem {
   date: string;
   headline: string;
+  uri?: string;
+  isImpactful?: boolean;
 }
 
 export interface ReportData {
@@ -63,11 +69,19 @@ export interface ReportData {
   content: string;
   citations: Citation[];
   moduleType?: ModuleType;
+  executiveSummary?: string;
+  financialSummary?: string;
   orgChartData?: TeamMember[];
   keyStats?: KeyStats;
   challengesAndInitiatives?: ChallengeOrInitiative[];
   technologyFootprint?: string[];
   recentNews?: NewsItem[];
+  qualityIntelligence?: string;
+  riskIntelligence?: string;
+  careModelsIntelligence?: string;
+  pharmacyIntelligence?: string;
+  hospitalNetworksIntelligence?: string;
+  employerGroupsIntelligence?: string;
 }
 
 export interface SavedReportData extends ReportData {
@@ -137,4 +151,30 @@ export interface ProductGap {
   challengeDescription: string;
   gapAnalysis: string;
   newSolutionIdea: string;
+}
+
+export interface PlaybookData {
+    prospectName?: string;
+    currentClient?: 'yes' | 'no';
+    opportunityIdentified?: string;
+    painPoints?: string;
+    clientGoals?: string;
+    businessCase?: string;
+    competitors?: string;
+    storyTelling?: string;
+    keyTakeaways?: string;
+    questionsAsked?: string;
+    wowFactors?: string;
+    followUpCommunication?: string;
+    nextSteps?: string;
+}
+
+export interface ReportTemplate {
+  id: string;
+  name: string;
+  prompt: string;
+  createdAt: string;
+  isDefault?: boolean;
+  job?: string;
+  icon?: string;
 }

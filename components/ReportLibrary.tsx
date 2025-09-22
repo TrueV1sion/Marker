@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { getSavedReports, deleteReport } from '../services/reportStore';
-import { SavedReportData, ModuleType } from '../types';
+import { SavedReportData, ModuleType, ReportData } from '../types';
 import ReportView from './ReportView';
 import SWOTReportView from './SWOTReportView';
 import { SearchIcon } from './icons/SearchIcon';
@@ -21,7 +21,11 @@ const getModuleClassName = (moduleType?: ModuleType): string => {
     return moduleType ? (mapping[moduleType] || 'bg-slate-100 text-slate-800') : 'bg-slate-100 text-slate-800';
 }
 
-const ReportLibrary: React.FC = () => {
+interface ReportLibraryProps {
+    onStartPlaybook: (report: ReportData) => void;
+}
+
+const ReportLibrary: React.FC<ReportLibraryProps> = ({ onStartPlaybook }) => {
     const [reports, setReports] = useState<SavedReportData[]>([]);
     const [selectedReport, setSelectedReport] = useState<SavedReportData | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
@@ -62,7 +66,7 @@ const ReportLibrary: React.FC = () => {
                 </button>
                 {selectedReport.moduleType === ModuleType.SWOT_ANALYSIS 
                     ? <SWOTReportView report={selectedReport} />
-                    : <ReportView report={selectedReport} />
+                    : <ReportView report={selectedReport} onStartPlaybook={onStartPlaybook} />
                 }
             </div>
         )

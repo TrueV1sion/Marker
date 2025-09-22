@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { TeamMember } from '../types';
 import { LinkedInIcon } from './icons/LinkedInIcon';
+import { GoogleIcon } from './icons/GoogleIcon';
 
 interface OrgChartProps {
     data: TeamMember[];
@@ -88,17 +89,30 @@ const OrgChart: React.FC<OrgChartProps> = ({ data }) => {
                         </svg>
                     </button>
                     <div className="flex items-start gap-4">
-                        {activeMember.linkedin && (
+                        <div className="flex flex-col gap-3 items-center flex-shrink-0 mt-1">
+                            {activeMember.linkedin && (
+                                <a
+                                    href={activeMember.linkedin}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-slate-400 hover:text-sky-600 transition-colors"
+                                    aria-label={`LinkedIn profile for ${activeMember.name}`}
+                                    title={`LinkedIn profile for ${activeMember.name}`}
+                                >
+                                    <LinkedInIcon className="h-6 w-6" />
+                                </a>
+                            )}
                             <a
-                                href={activeMember.linkedin}
+                                href={`https://www.google.com/search?q=${encodeURIComponent(`${activeMember.name} ${activeMember.title}`)}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-slate-400 hover:text-sky-600 flex-shrink-0 mt-1"
-                                aria-label={`LinkedIn profile for ${activeMember.name}`}
+                                className="text-slate-400 hover:text-red-500 transition-colors"
+                                aria-label={`Google search for ${activeMember.name}`}
+                                title={`Google search for ${activeMember.name}`}
                             >
-                                <LinkedInIcon className="h-6 w-6" />
+                                <GoogleIcon className="h-6 w-6" />
                             </a>
-                        )}
+                        </div>
                         <div>
                             <h4 className="font-bold text-lg text-slate-800">{activeMember.name}</h4>
                             <p className="text-sm text-slate-500 mb-3">{activeMember.title}</p>
