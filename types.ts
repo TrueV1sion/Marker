@@ -90,11 +90,40 @@ export interface SavedReportData extends ReportData {
   savedAt: string;
 }
 
+// --- NEW Collaboration Models ---
+export interface User {
+  id: string;
+  name: string;
+  avatarUrl: string; // e.g., https://picsum.photos/seed/{id}/40/40
+}
+
+export interface Team {
+  id: string;
+  name: string;
+  members: User[];
+}
+
+export interface Comment {
+  id: string;
+  author: User;
+  content: string;
+  createdAt: string;
+}
+// --- END NEW Collaboration Models ---
+
+
 export interface ProspectBookData extends ReportData {
   prospectName: string; // This is the unique key
   createdAt: string;
   updatedAt: string;
   notes?: string;
+
+  // --- ADDED for Collaboration ---
+  ownerId?: string; // ID of the user who created it
+  teamId?: string; // ID of the team it belongs to
+  access?: 'private' | 'team'; // Who can see it
+  sharedWith?: { user: User; role: 'viewer' | 'editor' }[]; // Specific users it's shared with
+  comments?: Comment[]; // In-context comments
 }
 
 

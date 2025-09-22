@@ -78,12 +78,45 @@ export const createOrUpdateProspectBook = (
         createdAt: existingBook ? existingBook.createdAt : now,
         updatedAt: now,
         notes: existingBook ? existingBook.notes : '',
+        sharedWith: existingBook ? existingBook.sharedWith : [],
     };
     
     store[key] = newBookData;
     saveProspectBookStore(store);
     return newBookData;
 };
+
+/**
+ * Partially updates an existing prospect book.
+ * @param {string} prospectName - The name of the prospect to update.
+ * @param {Partial<Omit<ProspectBookData, 'prospectName' | 'createdAt'>>} updates - The fields to update.
+ * @returns {ProspectBookData | null} The updated book, or null if not found.
+ */
+export const updateProspectBook = (
+    prospectName: string,
+    updates: Partial<Omit<ProspectBookData, 'prospectName' | 'createdAt'>>
+): ProspectBookData | null => {
+    const store = getProspectBookStore();
+    const key = prospectName.toLowerCase();
+    const existingBook = store[key];
+
+    if (!existingBook) {
+        console.warn(`Prospect book "${prospectName}" not found for update.`);
+        return null;
+    }
+
+    const now = new Date().toISOString();
+    const updatedBook: ProspectBookData = {
+        ...existingBook,
+        ...updates,
+        updatedAt: now,
+    };
+    
+    store[key] = updatedBook;
+    saveProspectBookStore(store);
+    return updatedBook;
+};
+
 
 /**
  * Deletes a prospect book from the store.

@@ -1,16 +1,25 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
-import { getProspectBooks, createOrUpdateProspectBook } from '../services/prospectBookStore';
-import { ProspectBookData, ReportData, SavedReportData } from '../types';
+import { getProspectBooks, createOrUpdateProspectBook, updateProspectBook } from '../services/prospectBookStore';
+import { ProspectBookData, ReportData, SavedReportData, User } from '../types';
 import { SearchIcon } from './icons/SearchIcon';
 import ReportView from './ReportView'; // Re-used for a consistent, non-editable view display
 import { SaveIcon } from './icons/SaveIcon';
 import { PencilIcon } from './icons/PencilIcon';
+import { ShareIcon } from './icons/ShareIcon';
+import { PlusIcon } from './icons/PlusIcon';
+import { ShareModal } from './ShareModal';
 
 interface ProspectBookProps {
   initialProspectName?: string;
   onStartPlaybook: (report: ReportData) => void;
 }
+
+// Mocked data for current user and other user for the share demo
+const MOCK_CURRENT_USER: User = { id: 'user-1', name: 'You', avatarUrl: 'https://picsum.photos/seed/user-1/40/40' };
+const MOCK_TEAMMATE: User = { id: 'user-2', name: 'David Evans', avatarUrl: 'https://picsum.photos/seed/user-2/40/40' };
+const MOCK_SALES_MANAGER: User = { id: 'user-3', name: 'Alicia Chen', avatarUrl: 'https://picsum.photos/seed/user-3/40/40' };
+const AVAILABLE_TEAMMATES = [MOCK_TEAMMATE, MOCK_SALES_MANAGER];
+
 
 const ProspectBook: React.FC<ProspectBookProps> = ({ initialProspectName, onStartPlaybook }) => {
     const [books, setBooks] = useState<ProspectBookData[]>([]);
@@ -18,6 +27,7 @@ const ProspectBook: React.FC<ProspectBookProps> = ({ initialProspectName, onStar
     const [searchTerm, setSearchTerm] = useState('');
     const [isEditMode, setIsEditMode] = useState(false);
     const [editedBook, setEditedBook] = useState<ProspectBookData | null>(null);
+    const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
     // Effect to load and subscribe to book data
     useEffect(() => {
@@ -90,6 +100,20 @@ const ProspectBook: React.FC<ProspectBookProps> = ({ initialProspectName, onStar
         setEditedBook({ ...editedBook, [name]: value });
     }
     
+    const handleShareUpdate = (newSharedWith: { user: User; role: 'viewer' | 'editor' }[]) => {
+        if (!activeBook) return;
+        updateProspectBook(activeBook.prospectName, { sharedWith: newSharedWith });
+        // The useEffect listening to 'prospect-books-updated' will handle the UI refresh.
+    };
+
+    const bookUsers = useMemo(() => {
+        if (!activeBook) return [];
+        // In a real app, this would come from `activeBook.owner` and `activeBook.sharedWith`
+        // For this mock, the current user is always the owner.
+        const sharedUsers = activeBook.sharedWith?.map(s => s.user) || [];
+        return [MOCK_CURRENT_USER, ...sharedUsers];
+    }, [activeBook]);
+    
     const renderContent = () => {
         const bookToDisplay = isEditMode ? editedBook : activeBook;
 
@@ -126,7 +150,7 @@ const ProspectBook: React.FC<ProspectBookProps> = ({ initialProspectName, onStar
                         value={editedBook?.notes || ''}
                         onChange={handleInputChange}
                         rows={8}
-                        placeholder="Add internal notes, call logs, or other intelligence here..."
+                        placeholder="Add internal notes, call logs, or other intelligence here... Use @ to mention teammates."
                         className="w-full p-3 border border-slate-300 rounded-md focus:ring-2 focus:ring-sky-500 focus:outline-none transition"
                      />
                 </div>
@@ -155,66 +179,95 @@ const ProspectBook: React.FC<ProspectBookProps> = ({ initialProspectName, onStar
     };
 
     return (
-        <div className="flex gap-8 h-full">
-            {/* --- Left Sidebar: Book List --- */}
-            <div className="w-1/4 flex-shrink-0 bg-white p-4 rounded-lg shadow-md flex flex-col">
-                <h2 className="text-xl font-bold text-slate-800 mb-4">Prospect Books</h2>
-                <div className="relative mb-4">
-                    <input
-                        type="text"
-                        placeholder="Search books..."
-                        value={searchTerm}
-                        onChange={e => setSearchTerm(e.target.value)}
-                        className="w-full p-2 pl-8 border border-slate-300 rounded-md focus:ring-2 focus:ring-sky-500 focus:outline-none transition"
-                    />
-                    <SearchIcon className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                </div>
-                <div className="flex-grow overflow-y-auto pr-2 -mr-2">
-                    {filteredBooks.length === 0 ? (
-                        <p className="text-sm text-slate-500 text-center mt-8">No books found.</p>
-                    ) : (
-                        <ul className="space-y-2">
-                            {filteredBooks.map(book => (
-                                <li key={book.prospectName}>
-                                    <button
-                                        onClick={() => handleSelectBook(book)}
-                                        className={`w-full text-left p-3 rounded-md transition-colors ${activeBook?.prospectName === book.prospectName ? 'bg-sky-500 text-white' : 'hover:bg-slate-100'}`}
-                                    >
-                                        <p className="font-semibold truncate">{book.prospectName}</p>
-                                        <p className={`text-xs ${activeBook?.prospectName === book.prospectName ? 'text-sky-200' : 'text-slate-500'}`}>
-                                            Updated {new Date(book.updatedAt).toLocaleDateString()}
-                                        </p>
-                                    </button>
-                                </li>
-                            ))}
-                        </ul>
-                    )}
-                </div>
-            </div>
-
-            {/* --- Right Main Panel: Content --- */}
-            <div className="flex-1 overflow-y-auto">
-                {activeBook && (
-                    <div className="mb-4 text-right space-x-2">
-                        {isEditMode ? (
-                            <>
-                                <button onClick={handleCancelEdit} className="bg-slate-200 text-slate-700 px-4 py-2 rounded-md font-semibold hover:bg-slate-300 transition-colors">
-                                    Cancel
-                                </button>
-                                <button onClick={handleSaveEdit} className="flex items-center justify-center bg-sky-500 text-white px-4 py-2 rounded-md font-semibold hover:bg-sky-600 transition-colors">
-                                    <SaveIcon className="h-5 w-5 mr-2" /> Save Changes
-                                </button>
-                            </>
+        <>
+            {activeBook && (
+                <ShareModal
+                    book={activeBook}
+                    isOpen={isShareModalOpen}
+                    onClose={() => setIsShareModalOpen(false)}
+                    onUpdateSharing={handleShareUpdate}
+                    availableTeammates={AVAILABLE_TEAMMATES}
+                    currentUser={MOCK_CURRENT_USER}
+                />
+            )}
+            <div className="flex gap-8 h-full">
+                {/* --- Left Sidebar: Book List --- */}
+                <div className="w-1/4 flex-shrink-0 bg-white p-4 rounded-lg shadow-md flex flex-col">
+                    <h2 className="text-xl font-bold text-slate-800 mb-4">Prospect Books</h2>
+                    <div className="relative mb-4">
+                        <input
+                            type="text"
+                            placeholder="Search books..."
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                            className="w-full p-2 pl-8 border border-slate-300 rounded-md focus:ring-2 focus:ring-sky-500 focus:outline-none transition"
+                        />
+                        <SearchIcon className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    </div>
+                    <div className="flex-grow overflow-y-auto pr-2 -mr-2">
+                        {filteredBooks.length === 0 ? (
+                            <p className="text-sm text-slate-500 text-center mt-8">No books found.</p>
                         ) : (
-                             <button onClick={handleEnterEditMode} className="flex items-center justify-center bg-slate-700 text-white px-4 py-2 rounded-md font-semibold hover:bg-slate-800 transition-colors">
-                                <PencilIcon className="h-5 w-5 mr-2" /> Edit Book
-                            </button>
+                            <ul className="space-y-2">
+                                {filteredBooks.map(book => (
+                                    <li key={book.prospectName}>
+                                        <button
+                                            onClick={() => handleSelectBook(book)}
+                                            className={`w-full text-left p-3 rounded-md transition-colors ${activeBook?.prospectName === book.prospectName ? 'bg-sky-500 text-white' : 'hover:bg-slate-100'}`}
+                                        >
+                                            <p className="font-semibold truncate">{book.prospectName}</p>
+                                            <p className={`text-xs ${activeBook?.prospectName === book.prospectName ? 'text-sky-200' : 'text-slate-500'}`}>
+                                                Updated {new Date(book.updatedAt).toLocaleDateString()}
+                                            </p>
+                                        </button>
+                                    </li>
+                                ))}
+                            </ul>
                         )}
                     </div>
-                )}
-                {renderContent()}
+                </div>
+
+                {/* --- Right Main Panel: Content --- */}
+                <div className="flex-1 overflow-y-auto">
+                    {activeBook && (
+                        <div className="mb-4 flex justify-between items-center">
+                            <div className="flex items-center">
+                                <div className="flex -space-x-2">
+                                    {bookUsers.map(user => (
+                                        <img key={user.id} className="inline-block h-8 w-8 rounded-full ring-2 ring-white" src={user.avatarUrl} alt={user.name} title={user.name} />
+                                    ))}
+                                </div>
+                                <button onClick={() => setIsShareModalOpen(true)} className="ml-2 p-2 rounded-full hover:bg-slate-200 transition-colors">
+                                    <PlusIcon className="h-5 w-5 text-slate-600" />
+                                </button>
+                            </div>
+                            <div className="space-x-2">
+                            {isEditMode ? (
+                                <>
+                                    <button onClick={handleCancelEdit} className="bg-slate-200 text-slate-700 px-4 py-2 rounded-md font-semibold hover:bg-slate-300 transition-colors">
+                                        Cancel
+                                    </button>
+                                    <button onClick={handleSaveEdit} className="flex items-center justify-center bg-sky-500 text-white px-4 py-2 rounded-md font-semibold hover:bg-sky-600 transition-colors">
+                                        <SaveIcon className="h-5 w-5 mr-2" /> Save Changes
+                                    </button>
+                                </>
+                            ) : (
+                                <>
+                                <button onClick={() => setIsShareModalOpen(true)} className="flex items-center justify-center bg-slate-100 text-slate-700 px-4 py-2 rounded-md font-semibold hover:bg-slate-200 transition-colors">
+                                    <ShareIcon className="h-5 w-5 mr-2" /> Share
+                                </button>
+                                <button onClick={handleEnterEditMode} className="flex items-center justify-center bg-slate-700 text-white px-4 py-2 rounded-md font-semibold hover:bg-slate-800 transition-colors">
+                                    <PencilIcon className="h-5 w-5 mr-2" /> Edit Book
+                                </button>
+                                </>
+                            )}
+                            </div>
+                        </div>
+                    )}
+                    {renderContent()}
+                </div>
             </div>
-        </div>
+        </>
     );
 };
 
